@@ -285,6 +285,101 @@ TOTALS           |            1.0000            |            1.0000            |
 
 ---
 
+### ✅ 5.6. BTC Feed Restoration (Step 4)
+
+**Files**: `clients/coinbaseClient.ts`, `clients/coinGeckoClient.ts`, `workers/backfill-btc-worker.ts`
+
+**Purpose**: Restore BTC daily return indicator with CoinGecko primary + Coinbase fallback
+
+**Implementation**:
+
+1. **CoinGecko Client (Primary)**
+   - Fetches 2-day price history for calculating daily returns
+   - Retry logic: 3 attempts with exponential backoff (2s, 4s, 8s)
+   - Historical data: Up to 365 days via free API
+
+2. **Coinbase Client (Fallback)**
+   - Fetches spot BTC price when CoinGecko fails
+   - Requires previous price from cache/database for daily return calculation
+   - Retry logic: 2 attempts with exponential backoff (1s, 2s)
+
+3. **Automatic Failover Logic**
+   ```typescript
+   // In fetchBtcDailyReturn():
+   try {
+     // Try CoinGecko (provides 2-day history)
+     return calculateDailyReturn(prevPrice, currPrice);
+   } catch (coinGeckoError) {
+     // Fallback to Coinbase spot price + cached previous price
+     return calculateDailyReturn(cachedPrevPrice, coinbaseSpotPrice);
+   }
+   ```
+
+4. **Historical Data Backfill**
+   - Worker: `workers/backfill-btc-worker.ts`
+   - Script: `npm run worker:backfill:btc`
+   - Fetches 365 days of historical BTC prices from CoinGecko
+   - Calculates daily returns for each day
+   - Stores in `history_values` table
+   - Computes rolling statistics (mean, stddev) with 10-year window
+   - Refreshes materialized view to include BTC stats
+
+**Impact of BTC Restoration**:
+
+| Metric | Before BTC | After BTC | Change |
+|--------|-----------|-----------|--------|
+| Active Indicators | 6 | 7 | +1 ✓ |
+| Total Weight (actual) | 8.20 | 9.20 | +1.00 |
+| Normalized Weight Sum | 1.0000 | 1.0000 | (unchanged) |
+| Composite PXI | -4.617 | -5.182 | -0.565 |
+
+**BTC Contribution Analysis** (Current State):
+```
+Daily Return:          +1.385% (positive, risk-on sentiment)
+Z-Score:               +5.191 (elevated above historical mean)
+Risk Direction:        higher_is_less_risk
+Direction Multiplier:  -1 (inverts contribution)
+Base Weight:           1.00
+Normalized Weight:     0.1087 (10.87% influence)
+Contribution:          -0.5646 (negative = systemic stress signal)
+
+Interpretation:
+  Positive BTC return (+1.385%) with high z-score (+5.191)
+  → Risk-on sentiment in crypto
+  → Directional multiplier flips to negative contribution
+  → Correctly signals: "Excessive risk appetite" = potential stress
+```
+
+**Weight Redistribution**:
+
+When BTC was restored, automatic weight normalization adjusted all indicators:
+
+| Indicator | Weight (6 active) | Weight (7 active) | Change |
+|-----------|------------------|------------------|---------|
+| HY OAS | 18.29% | 16.30% | -1.99% |
+| IG OAS | 21.95% | 19.57% | -2.38% |
+| VIX | 21.95% | 19.57% | -2.38% |
+| U-3 | 12.20% | 10.87% | -1.33% |
+| USD | 9.76% | 8.70% | -1.06% |
+| NFCI | 15.85% | 14.13% | -1.72% |
+| BTC | MISSING | 10.87% | +10.87% ✓ |
+| **TOTAL** | **100.00%** | **100.00%** | **0.00%** |
+
+**Database Impact**:
+- `history_values`: +365 BTC daily return records
+- `stats_values`: +335 BTC rolling statistics
+- `latest_stats`: Materialized view includes BTC
+- `contributions`: BTC now appears in all PXI calculations
+
+**Verification**:
+```bash
+npm run worker:backfill:btc   # Backfill 365 days of BTC history
+npm run worker:compute         # Verify BTC included in PXI
+npx tsx scripts/verify-normalization.ts  # Confirm 7 active indicators
+```
+
+---
+
 ### ✅ 6. Composite PXI Formula & Regime Classification
 
 **File**: `workers/compute-worker.ts:68-75, 254-258`
