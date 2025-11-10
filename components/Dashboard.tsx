@@ -8,6 +8,8 @@ import Gauge from './Gauge';
 import CompositeBar from './CompositeBar';
 import MetricsTable from './MetricsTable';
 import Ticker from './Ticker';
+import Alerts from './Alerts';
+import RegimeIndicator from './RegimeIndicator';
 
 export default function Dashboard() {
   const [data, setData] = useState<PXIResponse | null>(null);
@@ -39,6 +41,8 @@ export default function Dashboard() {
     return (
       <div className="flex flex-col gap-6 pb-20">
         <Hero data={data} />
+        {data.regime && <RegimeIndicator regime={data.regime} />}
+        {data.alerts && data.alerts.length > 0 && <Alerts alerts={data.alerts} />}
         <Gauge value={data.pxi} />
         <CompositeBar value={data.pxi} />
         <MetricsTable metrics={data.metrics} />

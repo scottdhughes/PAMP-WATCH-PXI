@@ -217,6 +217,378 @@ export const insertComposite = async (composite: {
 };
 
 /**
+ * Fetches latest rolling statistics for all indicators
+ *
+ * @returns Map of indicator ID to { mean, stddev }
+ */
+export const fetchLatestStats = async (): Promise<
+  Map<string, { mean: number; stddev: number; sampleCount: number }>
+> => {
+  let client: PoolClient | null = null;
+  try {
+    client = await pool.connect();
+    const result = await client.query(`
+      SELECT indicator_id, mean_value, stddev_value, sample_count
+      FROM latest_stats
+    `);
+
+    const statsMap = new Map();
+    result.rows.forEach((row) => {
+      statsMap.set(row.indicator_id, {
+        mean: row.mean_value,
+        stddev: row.stddev_value,
+        sampleCount: row.sample_count,
+      });
+    });
+
+    logger.info({ count: statsMap.size }, 'Fetched latest statistics');
+    return statsMap;
+  } catch (error) {
+    logger.error({ error }, 'Failed to fetch latest statistics');
+    throw new Error(`Failed to fetch stats: ${(error as Error).message}`);
+  } finally {
+    if (client) {
+      client.release();
+    }
+  }
+};
+
+/**
+ * Inserts z-scores into the database
+ */
+export const insertZScores = async (
+  zScores: Array<{
+    indicatorId: string;
+    timestamp: string;
+    rawValue: number;
+    meanValue: number;
+    stddevValue: number;
+    zScore: number;
+  }>,
+): Promise<void> => {
+  if (!zScores.length) return;
+
+  let client: PoolClient | null = null;
+  try {
+    client = await pool.connect();
+    const insertText = `
+      INSERT INTO z_scores
+        (indicator_id, timestamp, raw_value, mean_value, stddev_value, z_score)
+      VALUES
+        ${zScores
+          .map((_, idx) => `($${idx * 6 + 1}, $${idx * 6 + 2}, $${idx * 6 + 3}, $${idx * 6 + 4}, $${idx * 6 + 5}, $${idx * 6 + 6})`)
+          .join(', ')}
+      ON CONFLICT (indicator_id, timestamp)
+      DO UPDATE SET raw_value = EXCLUDED.raw_value, z_score = EXCLUDED.z_score
+    `;
+    const values = zScores.flatMap((z) => [
+      z.indicatorId,
+      z.timestamp,
+      z.rawValue,
+      z.meanValue,
+      z.stddevValue,
+      z.zScore,
+    ]);
+
+    await client.query(insertText, values);
+    logger.info({ count: zScores.length }, 'Z-scores inserted successfully');
+  } catch (error) {
+    logger.error({ error }, 'Failed to insert z-scores');
+    throw error;
+  } finally {
+    if (client) {
+      client.release();
+    }
+  }
+};
+
+/**
+ * Inserts contributions into the database
+ */
+export const insertContributions = async (
+  contributions: Array<{
+    indicatorId: string;
+    timestamp: string;
+    rawValue: number;
+    zScore: number;
+    baseWeight: number;
+    actualWeight: number;
+    weightMultiplier: number;
+    contribution: number;
+  }>,
+): Promise<void> => {
+  if (!contributions.length) return;
+
+  let client: PoolClient | null = null;
+  try {
+    client = await pool.connect();
+    const insertText = `
+      INSERT INTO contributions
+        (indicator_id, timestamp, raw_value, z_score, base_weight, actual_weight, weight_multiplier, contribution)
+      VALUES
+        ${contributions
+          .map((_, idx) =>
+            `($${idx * 8 + 1}, $${idx * 8 + 2}, $${idx * 8 + 3}, $${idx * 8 + 4}, $${idx * 8 + 5}, $${idx * 8 + 6}, $${idx * 8 + 7}, $${idx * 8 + 8})`
+          )
+          .join(', ')}
+      ON CONFLICT (indicator_id, timestamp)
+      DO UPDATE SET contribution = EXCLUDED.contribution, actual_weight = EXCLUDED.actual_weight
+    `;
+    const values = contributions.flatMap((c) => [
+      c.indicatorId,
+      c.timestamp,
+      c.rawValue,
+      c.zScore,
+      c.baseWeight,
+      c.actualWeight,
+      c.weightMultiplier,
+      c.contribution,
+    ]);
+
+    await client.query(insertText, values);
+    logger.info({ count: contributions.length }, 'Contributions inserted successfully');
+  } catch (error) {
+    logger.error({ error }, 'Failed to insert contributions');
+    throw error;
+  } finally {
+    if (client) {
+      client.release();
+    }
+  }
+};
+
+/**
+ * Inserts composite PXI regime record
+ */
+export const insertCompositePxiRegime = async (composite: {
+  timestamp: string;
+  pxiValue: number;
+  pxiZScore: number;
+  regime: string;
+  totalWeight: number;
+  pampCount: number;
+  stressCount: number;
+}): Promise<void> => {
+  let client: PoolClient | null = null;
+  try {
+    client = await pool.connect();
+    await client.query(
+      `INSERT INTO composite_pxi_regime
+        (timestamp, pxi_value, pxi_z_score, regime, total_weight, pamp_count, stress_count)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      ON CONFLICT (timestamp)
+      DO UPDATE SET pxi_value = EXCLUDED.pxi_value, regime = EXCLUDED.regime`,
+      [
+        composite.timestamp,
+        composite.pxiValue,
+        composite.pxiZScore,
+        composite.regime,
+        composite.totalWeight,
+        composite.pampCount,
+        composite.stressCount,
+      ],
+    );
+    logger.info({ regime: composite.regime, pxi: composite.pxiValue }, 'Composite PXI regime inserted');
+  } catch (error) {
+    logger.error({ error }, 'Failed to insert composite PXI regime');
+    throw error;
+  } finally {
+    if (client) {
+      client.release();
+    }
+  }
+};
+
+/**
+ * Inserts alerts into the database
+ */
+export const insertAlerts = async (
+  alerts: Array<{
+    alertType: string;
+    indicatorId: string | null;
+    timestamp: string;
+    rawValue: number | null;
+    zScore: number | null;
+    weight: number | null;
+    contribution: number | null;
+    threshold: number | null;
+    message: string;
+    severity: 'info' | 'warning' | 'critical';
+  }>,
+): Promise<void> => {
+  if (!alerts.length) return;
+
+  let client: PoolClient | null = null;
+  try {
+    client = await pool.connect();
+    const insertText = `
+      INSERT INTO alerts
+        (alert_type, indicator_id, timestamp, raw_value, z_score, weight, contribution, threshold, message, severity)
+      VALUES
+        ${alerts
+          .map((_, idx) =>
+            `($${idx * 10 + 1}, $${idx * 10 + 2}, $${idx * 10 + 3}, $${idx * 10 + 4}, $${idx * 10 + 5}, $${idx * 10 + 6}, $${idx * 10 + 7}, $${idx * 10 + 8}, $${idx * 10 + 9}, $${idx * 10 + 10})`
+          )
+          .join(', ')}
+    `;
+    const values = alerts.flatMap((a) => [
+      a.alertType,
+      a.indicatorId,
+      a.timestamp,
+      a.rawValue,
+      a.zScore,
+      a.weight,
+      a.contribution,
+      a.threshold,
+      a.message,
+      a.severity,
+    ]);
+
+    await client.query(insertText, values);
+    logger.info({ count: alerts.length }, 'Alerts inserted successfully');
+  } catch (error) {
+    logger.error({ error }, 'Failed to insert alerts');
+    throw error;
+  } finally {
+    if (client) {
+      client.release();
+    }
+  }
+};
+
+/**
+ * Inserts historical values into the database (for live feed)
+ */
+export const insertHistoricalValues = async (
+  values: Array<{
+    indicatorId: string;
+    date: string;
+    rawValue: number;
+    source: string;
+  }>,
+): Promise<void> => {
+  if (!values.length) return;
+
+  let client: PoolClient | null = null;
+  try {
+    client = await pool.connect();
+    const insertText = `
+      INSERT INTO history_values
+        (indicator_id, date, raw_value, source)
+      VALUES
+        ${values
+          .map((_, idx) => `($${idx * 4 + 1}, $${idx * 4 + 2}, $${idx * 4 + 3}, $${idx * 4 + 4})`)
+          .join(', ')}
+      ON CONFLICT (indicator_id, date)
+      DO UPDATE SET raw_value = EXCLUDED.raw_value, source = EXCLUDED.source
+    `;
+    const vals = values.flatMap((v) => [
+      v.indicatorId,
+      v.date,
+      v.rawValue,
+      v.source,
+    ]);
+
+    await client.query(insertText, vals);
+    logger.info({ count: values.length }, 'Historical values inserted successfully');
+  } catch (error) {
+    logger.error({ error }, 'Failed to insert historical values');
+    throw error;
+  } finally {
+    if (client) {
+      client.release();
+    }
+  }
+};
+
+/**
+ * Fetches latest alerts from the database
+ *
+ * @param limit - Number of alerts to fetch (default: 10)
+ * @param unacknowledgedOnly - Only fetch unacknowledged alerts
+ * @returns Array of alert records
+ */
+export const fetchLatestAlerts = async (
+  limit = 10,
+  unacknowledgedOnly = true,
+): Promise<
+  Array<{
+    id: number;
+    alertType: string;
+    indicatorId: string | null;
+    timestamp: string;
+    rawValue: number | null;
+    zScore: number | null;
+    weight: number | null;
+    contribution: number | null;
+    threshold: number | null;
+    message: string;
+    severity: 'info' | 'warning' | 'critical';
+    acknowledged: boolean;
+  }>
+> => {
+  let client: PoolClient | null = null;
+  try {
+    client = await pool.connect();
+    const whereClause = unacknowledgedOnly ? 'WHERE acknowledged = FALSE' : '';
+    const result = await client.query(
+      `SELECT id, alert_type as "alertType", indicator_id as "indicatorId",
+              timestamp, raw_value as "rawValue", z_score as "zScore",
+              weight, contribution, threshold, message, severity, acknowledged
+       FROM alerts
+       ${whereClause}
+       ORDER BY timestamp DESC, id DESC
+       LIMIT $1`,
+      [limit],
+    );
+    return result.rows;
+  } catch (error) {
+    logger.error({ error }, 'Failed to fetch alerts');
+    throw error;
+  } finally {
+    if (client) {
+      client.release();
+    }
+  }
+};
+
+/**
+ * Fetches latest composite PXI regime
+ *
+ * @returns Latest regime record or null
+ */
+export const fetchLatestRegime = async (): Promise<{
+  timestamp: string;
+  pxiValue: number;
+  pxiZScore: number;
+  regime: string;
+  totalWeight: number;
+  pampCount: number;
+  stressCount: number;
+} | null> => {
+  let client: PoolClient | null = null;
+  try {
+    client = await pool.connect();
+    const result = await client.query(
+      `SELECT timestamp, pxi_value as "pxiValue", pxi_z_score as "pxiZScore",
+              regime, total_weight as "totalWeight", pamp_count as "pampCount",
+              stress_count as "stressCount"
+       FROM composite_pxi_regime
+       ORDER BY timestamp DESC
+       LIMIT 1`,
+    );
+    return result.rows[0] || null;
+  } catch (error) {
+    logger.error({ error }, 'Failed to fetch latest regime');
+    throw error;
+  } finally {
+    if (client) {
+      client.release();
+    }
+  }
+};
+
+/**
  * Gracefully closes the database pool
  */
 export const closePool = async (): Promise<void> => {

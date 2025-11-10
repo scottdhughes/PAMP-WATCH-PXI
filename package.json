@@ -11,6 +11,7 @@
     "server": "tsx server.ts",
     "worker:ingest": "tsx workers/ingest-worker.ts",
     "worker:compute": "tsx workers/compute-worker.ts",
+    "worker:backfill": "tsx workers/backfill-worker.ts",
     "worker:run": "npm run worker:ingest && npm run worker:compute",
     "test": "vitest"
   },

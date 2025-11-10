@@ -72,6 +72,31 @@ export interface BreachInfo {
 }
 
 /**
+ * Alert record from API
+ */
+export interface Alert {
+  id: number;
+  alertType: string;
+  indicatorId: string | null;
+  timestamp: string;
+  rawValue: number | null;
+  zScore: number | null;
+  message: string;
+  severity: 'info' | 'warning' | 'critical';
+}
+
+/**
+ * Regime information
+ */
+export interface Regime {
+  regime: string;
+  pxiValue: number;
+  totalWeight: number;
+  pampCount: number;
+  stressCount: number;
+}
+
+/**
  * Complete PXI API response
  */
 export interface PXIResponse {
@@ -81,6 +106,8 @@ export interface PXIResponse {
   calculatedAt: string;
   metrics: MetricRow[];
   ticker: string[];
+  alerts?: Alert[];
+  regime?: Regime;
 }
 
 /**

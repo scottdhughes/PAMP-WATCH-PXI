@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import type { MetricRow } from '../lib/types';
 
 interface Props {
@@ -19,17 +20,40 @@ const badgeClass = (breach: MetricRow['breach']): string => {
   }
 };
 
-const metricDescriptions: Record<string, string> = {
-  'hyOas': 'High Yield Option-Adjusted Spread: Premium investors demand for corporate junk bonds over Treasuries. Higher spreads indicate credit stress.',
-  'igOas': 'Investment Grade Option-Adjusted Spread: Premium for investment-grade corporate bonds. Widens during market stress.',
-  'vix': 'CBOE Volatility Index: "Fear gauge" measuring expected 30-day volatility. Above 20 signals elevated fear, above 30 signals high fear.',
-  'u3': 'U-3 Unemployment Rate: Standard unemployment rate. Rising unemployment indicates economic weakness.',
-  'usd': 'Broad US Dollar Index: Trade-weighted value of USD against major trading partners. Higher = stronger dollar.',
-  'nfci': 'National Financial Conditions Index: Measures stress in financial markets. Positive values indicate tight/stressed conditions.',
-  'btcReturn': 'Bitcoin Daily Return: 24-hour price change as a percentage. Measures cryptocurrency market sentiment and volatility.',
+const metricInfo: Record<string, { description: string; details: string }> = {
+  'hyOas': {
+    description: 'High Yield Option-Adjusted Spread',
+    details: 'Premium investors demand for corporate junk bonds over Treasuries. Higher spreads indicate credit stress.'
+  },
+  'igOas': {
+    description: 'Investment Grade Option-Adjusted Spread',
+    details: 'Premium for investment-grade corporate bonds. Widens during market stress.'
+  },
+  'vix': {
+    description: 'CBOE Volatility Index',
+    details: '"Fear gauge" measuring expected 30-day volatility. Above 20 signals elevated fear, above 30 signals high fear.'
+  },
+  'u3': {
+    description: 'U-3 Unemployment Rate',
+    details: 'Standard unemployment rate. Rising unemployment indicates economic weakness.'
+  },
+  'usd': {
+    description: 'Broad US Dollar Index',
+    details: 'Trade-weighted value of USD against major trading partners. Higher = stronger dollar.'
+  },
+  'nfci': {
+    description: 'National Financial Conditions Index',
+    details: 'Measures stress in financial markets. Positive values indicate tight/stressed conditions.'
+  },
+  'btcReturn': {
+    description: 'Bitcoin Daily Return',
+    details: '24-hour price change as a percentage. Measures cryptocurrency market sentiment and volatility.'
+  },
 };
 
 export default function MetricsTable({ metrics }: Props) {
+  const [hoveredMetric, setHoveredMetric] = useState<string | null>(null);
+
   return (
     <div className="rounded-3xl bg-card shadow-2xl overflow-x-auto">
       <div className="min-w-[800px]">
@@ -47,14 +71,33 @@ export default function MetricsTable({ metrics }: Props) {
           {metrics.map((metric) => (
             <div
               key={metric.id}
-              className="grid grid-cols-8 gap-2 px-6 py-4 text-sm text-slate-100 dark:text-slate-100 light:text-slate-900"
+              className="grid grid-cols-8 gap-2 px-6 py-4 text-sm text-slate-100 dark:text-slate-100 light:text-slate-900 relative"
             >
-              <span
-                className="font-semibold cursor-help underline decoration-dotted decoration-slate-500"
-                title={metricDescriptions[metric.id] || metric.label}
-              >
-                {metric.label}
-              </span>
+              <div className="relative">
+                <span
+                  className="font-semibold cursor-help underline decoration-dotted decoration-slate-500 hover:text-violet transition-colors"
+                  onMouseEnter={() => setHoveredMetric(metric.id)}
+                  onMouseLeave={() => setHoveredMetric(null)}
+                >
+                  {metric.label}
+                </span>
+                {hoveredMetric === metric.id && metricInfo[metric.id] && (
+                  <div className="absolute left-0 top-full mt-2 z-50 w-80 p-4 bg-slate-800 dark:bg-slate-800 light:bg-white border border-slate-700 dark:border-slate-700 light:border-slate-300 rounded-lg shadow-2xl">
+                    <div className="text-sm font-semibold text-violet mb-2">
+                      {metricInfo[metric.id].description}
+                    </div>
+                    <div className="text-xs text-slate-300 dark:text-slate-300 light:text-slate-600 mb-3">
+                      {metricInfo[metric.id].details}
+                    </div>
+                    <div className="text-xs text-slate-400 dark:text-slate-400 light:text-slate-500 space-y-1">
+                      <div><strong>Current:</strong> {metric.value.toFixed(3)}</div>
+                      <div><strong>Range:</strong> {metric.lower} - {metric.upper}</div>
+                      <div><strong>Z-Score:</strong> {metric.zScore.toFixed(2)}</div>
+                      <div><strong>Status:</strong> <span className={`${badgeClass(metric.breach)} px-2 py-0.5 rounded`}>{metric.breach}</span></div>
+                    </div>
+                  </div>
+                )}
+              </div>
               <span>{metric.value.toFixed(3)}</span>
               <span className={metric.delta >= 0 ? 'text-pampGreen' : 'text-pampRed'}>
                 {metric.delta >= 0 ? '+' : ''}
