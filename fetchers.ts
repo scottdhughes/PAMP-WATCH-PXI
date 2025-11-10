@@ -1,6 +1,4 @@
 import { fetchLatestFredObservation } from './clients/fredClient.js';
-import { fetchGlobalQuote } from './clients/alphaVantageClient.js';
-import { fetchLatestTwelveDataValue } from './clients/twelveDataClient.js';
 import { fetchBtcDailyReturn } from './clients/coinGeckoClient.js';
 import type { MetricFetcher, MetricSample } from './shared/types.js';
 import { logger } from './logger.js';
@@ -61,7 +59,7 @@ export const metricFetchers: MetricFetcher[] = [
     id: 'vix',
     label: 'VIX Index',
     fetch: async () => {
-      const { value, timestamp } = await fetchGlobalQuote('^VIX');
+      const { value, timestamp } = await fetchLatestFredObservation('VIXCLS');
       return {
         id: 'vix',
         label: 'VIX Index',
@@ -91,7 +89,7 @@ export const metricFetchers: MetricFetcher[] = [
     id: 'usd',
     label: 'USD Index (DXY)',
     fetch: async () => {
-      const { value, timestamp } = await fetchLatestTwelveDataValue('DXY', '5min');
+      const { value, timestamp } = await fetchLatestFredObservation('DTWEXBGS');
       return {
         id: 'usd',
         label: 'USD Index (DXY)',

@@ -9,7 +9,7 @@ const HARD_LIMITS: Record<MetricId, { min: number; max: number }> = {
   igOas: { min: 0, max: 0.1 },
   vix: { min: 5, max: 120 },
   u3: { min: 0.02, max: 0.25 },
-  usd: { min: 70, max: 120 },
+  usd: { min: 70, max: 135 },
   nfci: { min: -2, max: 5 },
   btcReturn: { min: -0.5, max: 0.5 },
 };
@@ -21,6 +21,9 @@ const HARD_LIMITS: Record<MetricId, { min: number; max: number }> = {
  * @throws Error if validation fails
  */
 export const validateSamples = (samples: MetricSample[]): void => {
+  // Log all sample values for debugging
+  logger.info({ samples: samples.map(s => ({ id: s.id, value: s.value })) }, 'Validating samples');
+
   samples.forEach((sample) => {
     const limits = HARD_LIMITS[sample.id];
     if (!limits) {
@@ -29,13 +32,15 @@ export const validateSamples = (samples: MetricSample[]): void => {
     }
 
     if (Number.isNaN(sample.value)) {
-      throw new Error(`Metric ${sample.id} produced NaN`);
+      const error = `Metric ${sample.id} produced NaN`;
+      logger.error({ metricId: sample.id }, error);
+      throw new Error(error);
     }
 
     if (sample.value < limits.min || sample.value > limits.max) {
-      throw new Error(
-        `Metric ${sample.id} value ${sample.value} fell outside limits [${limits.min}, ${limits.max}]`,
-      );
+      const error = `Metric ${sample.id} value ${sample.value} fell outside limits [${limits.min}, ${limits.max}]`;
+      logger.error({ metricId: sample.id, value: sample.value, limits }, error);
+      throw new Error(error);
     }
   });
 
@@ -43,7 +48,9 @@ export const validateSamples = (samples: MetricSample[]): void => {
   const hy = samples.find((s) => s.id === 'hyOas');
   const ig = samples.find((s) => s.id === 'igOas');
   if (hy && ig && hy.value <= ig.value) {
-    throw new Error(`HY OAS (${hy.value}) must exceed IG OAS (${ig.value})`);
+    const error = `HY OAS (${hy.value}) must exceed IG OAS (${ig.value})`;
+    logger.error({ hyValue: hy.value, igValue: ig.value }, error);
+    throw new Error(error);
   }
 
   logger.info({ count: samples.length }, 'All samples validated successfully');

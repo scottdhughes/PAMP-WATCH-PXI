@@ -47,7 +47,7 @@ export default function Dashboard() {
   }, [data, error]);
 
   return (
-    <main className="relative min-h-screen bg-[#0B0F14] px-4 py-6 text-white sm:px-8">
+    <main className="relative min-h-screen bg-gray-100 dark:bg-[#0B0F14] px-4 py-6 text-gray-900 dark:text-white sm:px-8 transition-colors">
       {content}
       <Ticker items={data?.ticker ?? []} />
     </main>

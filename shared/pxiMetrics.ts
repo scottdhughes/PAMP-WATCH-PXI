@@ -44,9 +44,9 @@ export const pxiMetricDefinitions: PXIMetricDefinition[] = [
   },
   {
     id: 'usd',
-    label: 'USD Index (DXY)',
-    lowerBound: 95,
-    upperBound: 105,
+    label: 'USD Index (Broad)',
+    lowerBound: 100,
+    upperBound: 130,
     weight: 0.8,
     polarity: 'positive',
   },
