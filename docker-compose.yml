@@ -1,0 +1,33 @@
+version: '3.9'
+services:
+  timescaledb:
+    image: timescale/timescaledb:2.14.2-pg15
+    environment:
+      POSTGRES_DB: pxi
+      POSTGRES_USER: pxi
+      POSTGRES_PASSWORD: changeme
+    ports:
+      - '5432:5432'
+    volumes:
+      - timescale-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U pxi']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ..
+      dockerfile: infra/dockerfiles/api.Dockerfile
+    environment:
+      DATABASE_URL: postgres://pxi:changeme@timescaledb:5432/pxi
+      PORT: 8787
+    ports:
+      - '8787:8787'
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+
+volumes:
+  timescale-data:

@@ -1,0 +1,71 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: pxi
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: timescale-credentials
+  namespace: pxi
+stringData:
+  POSTGRES_DB: pxi
+  POSTGRES_USER: pxi
+  POSTGRES_PASSWORD: changeme
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: timescaledb
+  namespace: pxi
+spec:
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432
+  selector:
+    app: timescaledb
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: timescaledb
+  namespace: pxi
+spec:
+  selector:
+    matchLabels:
+      app: timescaledb
+  serviceName: timescaledb
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: timescaledb
+    spec:
+      containers:
+        - name: timescaledb
+          image: timescale/timescaledb:2.14.2-pg15
+          ports:
+            - containerPort: 5432
+          envFrom:
+            - secretRef:
+                name: timescale-credentials
+          volumeMounts:
+            - name: timescale-data
+              mountPath: /var/lib/postgresql/data
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - pg_isready -U $(POSTGRES_USER)
+            initialDelaySeconds: 10
+            periodSeconds: 10
+  volumeClaimTemplates:
+    - metadata:
+        name: timescale-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 20Gi
