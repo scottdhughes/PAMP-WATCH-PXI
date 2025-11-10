@@ -1,0 +1,110 @@
+/**
+ * Core type definitions for the PXI platform
+ */
+
+/**
+ * Metric ID type - ensures type safety for metric identifiers
+ */
+export type MetricId = 'hyOas' | 'igOas' | 'vix' | 'u3' | 'usd' | 'nfci' | 'btcReturn';
+
+/**
+ * Breach status type
+ */
+export type BreachStatus = 'Stress' | 'Caution' | 'Stable' | 'PAMP' | null;
+
+/**
+ * Sample data from external API sources
+ */
+export interface MetricSample {
+  id: MetricId;
+  label: string;
+  value: number;
+  unit: string;
+  sourceTimestamp: string;
+  ingestedAt: string;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Metric definition with bounds and weights
+ */
+export interface PXIMetricDefinition {
+  id: MetricId;
+  label: string;
+  lowerBound: number;
+  upperBound: number;
+  weight: number;
+  polarity: 'positive' | 'negative';
+}
+
+/**
+ * Metric row in API response
+ */
+export interface MetricRow {
+  id: MetricId;
+  label: string;
+  value: number;
+  delta: number;
+  lower: number;
+  upper: number;
+  zScore: number;
+  contribution: number;
+  breach: BreachStatus;
+}
+
+/**
+ * PXI band definition
+ */
+export interface PXIBand {
+  label: string;
+  min: number;
+  max: number;
+  color: string;
+}
+
+/**
+ * Breach information
+ */
+export interface BreachInfo {
+  pamp: MetricId[];
+  stress: MetricId[];
+  systemLevel: string | null;
+}
+
+/**
+ * Complete PXI API response
+ */
+export interface PXIResponse {
+  pxi: number;
+  statusLabel: string;
+  zScore: number;
+  calculatedAt: string;
+  metrics: MetricRow[];
+  ticker: string[];
+}
+
+/**
+ * Database composite record
+ */
+export interface CompositeRecord {
+  id: number;
+  calculatedAt: string;
+  zScore: number;
+  pxi: number;
+  metrics: Array<{
+    id: MetricId;
+    value: number;
+    zScore: number;
+    contribution: number;
+  }>;
+  breaches: BreachInfo;
+}
+
+/**
+ * Fetcher function type
+ */
+export interface MetricFetcher {
+  id: MetricId;
+  label: string;
+  fetch: () => Promise<MetricSample>;
+}

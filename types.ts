@@ -1,1 +1,1 @@
-export type { MetricRow, PXIResponse } from '@pxi/shared';
+export * from './shared/types.js';
