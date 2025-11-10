@@ -185,7 +185,12 @@ async function computePXI(): Promise<void> {
       // Apply dynamic weighting
       const weightMultiplier = getWeightMultiplier(zScore);
       const actualWeight = def.weight * weightMultiplier;
-      const contribution = actualWeight * zScore;
+
+      // Apply directional multiplier based on risk_direction
+      // higher_is_more_risk: direction = 1 (positive z-score = more risk)
+      // higher_is_less_risk: direction = -1 (positive z-score = less risk, inverted contribution)
+      const direction = def.riskDirection === 'higher_is_more_risk' ? 1 : -1;
+      const contribution = actualWeight * zScore * direction;
 
       totalWeight += actualWeight;
 

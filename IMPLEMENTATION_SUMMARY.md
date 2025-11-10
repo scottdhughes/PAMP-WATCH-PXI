@@ -173,14 +173,31 @@ function getWeightMultiplier(zScore: number): number {
 }
 ```
 
-**Contribution Calculation**:
+**Contribution Calculation with Directional Multiplier**:
 ```
-C_i = w_i × Z_i
+direction_i = (risk_direction == "higher_is_more_risk") ? 1 : -1
+C_i = w_i × Z_i × direction_i
 ```
 
 Where:
 - `w_i` = base_weight × multiplier
 - `Z_i` = statistical z-score
+- `direction_i` = directional multiplier based on risk_direction
+
+**Directional Logic**:
+- **higher_is_more_risk** (direction = +1): Contribution sign matches z-score
+  - Positive z-score → Positive contribution (more stress)
+  - Negative z-score → Negative contribution (less stress)
+- **higher_is_less_risk** (direction = -1): Contribution sign is inverted
+  - Positive z-score → **Negative** contribution (indicates flight to safety)
+  - Negative z-score → **Positive** contribution (reduced safe haven demand)
+
+**Example - USD Index**:
+- Current: z-score = +0.940 (USD above historical mean)
+- Risk direction: `higher_is_less_risk`
+- Direction multiplier: -1
+- Contribution: 0.8 × 0.940 × (-1) = **-0.752**
+- Interpretation: Strong USD indicates flight to safety, contributing to systemic stress
 
 **Stored in**: `contributions` table (5-year retention)
 
