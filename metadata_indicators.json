@@ -1,0 +1,145 @@
+{
+  "indicators": {
+    "HY_OAS": {
+      "id": "hyOas",
+      "name": "High Yield Option-Adjusted Spread",
+      "series_id": "BAMLH0A0HYM2",
+      "source": "FRED",
+      "risk_direction": "higher_is_more_risk",
+      "unit": "percent",
+      "description": "Spread between high-yield corporate bonds and US Treasuries. Higher spreads indicate increased credit risk and market stress.",
+      "lower_bound": 0.03,
+      "upper_bound": 0.08,
+      "base_weight": 1.5,
+      "polarity": "negative"
+    },
+    "IG_OAS": {
+      "id": "igOas",
+      "name": "Investment Grade Option-Adjusted Spread",
+      "series_id": "BAMLC0A4CBBB",
+      "source": "FRED",
+      "risk_direction": "higher_is_more_risk",
+      "unit": "percent",
+      "description": "Spread between investment-grade corporate bonds and US Treasuries. Widens during market stress and credit concerns.",
+      "lower_bound": 0.01,
+      "upper_bound": 0.03,
+      "base_weight": 1.2,
+      "polarity": "negative"
+    },
+    "VIX_Index": {
+      "id": "vix",
+      "name": "CBOE Volatility Index",
+      "series_id": "VIXCLS",
+      "source": "FRED",
+      "risk_direction": "higher_is_more_risk",
+      "unit": "index",
+      "description": "Market's expectation of 30-day forward-looking volatility. Known as the 'fear gauge'. Values >20 indicate elevated fear, >30 indicate high fear.",
+      "lower_bound": 12,
+      "upper_bound": 25,
+      "base_weight": 1.8,
+      "polarity": "negative"
+    },
+    "U3_Unemployment": {
+      "id": "u3",
+      "name": "U-3 Unemployment Rate",
+      "series_id": "UNRATE",
+      "source": "FRED",
+      "risk_direction": "higher_is_more_risk",
+      "unit": "percent",
+      "description": "Official unemployment rate. Rising unemployment indicates economic weakness and increased systemic risk.",
+      "lower_bound": 0.035,
+      "upper_bound": 0.06,
+      "base_weight": 1.0,
+      "polarity": "negative"
+    },
+    "USD_Index_Broad": {
+      "id": "usd",
+      "name": "US Dollar Index (Broad)",
+      "series_id": "DTWEXBGS",
+      "source": "FRED",
+      "risk_direction": "higher_is_less_risk",
+      "unit": "index",
+      "description": "Trade-weighted value of USD against major trading partners. Higher USD typically indicates flight to safety (risk-off behavior).",
+      "lower_bound": 100,
+      "upper_bound": 130,
+      "base_weight": 0.8,
+      "polarity": "positive"
+    },
+    "ChicagoFed_NFCI": {
+      "id": "nfci",
+      "name": "National Financial Conditions Index",
+      "series_id": "NFCI",
+      "source": "FRED",
+      "risk_direction": "higher_is_more_risk",
+      "unit": "index",
+      "description": "Measures stress in financial markets. Positive values indicate tight/stressed conditions, negative values indicate loose conditions.",
+      "lower_bound": -0.5,
+      "upper_bound": 0.5,
+      "base_weight": 1.3,
+      "polarity": "negative"
+    },
+    "BTC_Daily_Return": {
+      "id": "btcReturn",
+      "name": "Bitcoin Daily Return",
+      "series_id": "bitcoin",
+      "source": "CoinGecko",
+      "risk_direction": "higher_is_less_risk",
+      "unit": "percent",
+      "description": "24-hour percentage change in Bitcoin price. Positive returns may indicate healthy risk appetite and reduced systemic stress.",
+      "lower_bound": -0.05,
+      "upper_bound": 0.05,
+      "base_weight": 1.0,
+      "polarity": "positive"
+    }
+  },
+  "metadata": {
+    "version": "1.1",
+    "last_updated": "2025-11-10",
+    "total_indicators": 7,
+    "total_base_weight": 8.6,
+    "window_size_days": 2520,
+    "window_size_description": "~10 years of trading days",
+    "dynamic_weight_rules": {
+      "alpha": 1.5,
+      "alpha_threshold": 1.0,
+      "alpha_description": "Weight multiplier when |z-score| > 1.0",
+      "beta": 2.0,
+      "beta_threshold": 2.0,
+      "beta_description": "Weight multiplier when |z-score| > 2.0"
+    },
+    "regime_classification": {
+      "normal": {
+        "range": "|-PXI| <= 1.0",
+        "description": "Market conditions within normal statistical bounds"
+      },
+      "elevated_stress": {
+        "range": "1.0 < |PXI| <= 2.0",
+        "description": "Heightened market stress, approaching 2 standard deviations"
+      },
+      "crisis": {
+        "range": "|PXI| > 2.0",
+        "description": "Severe market dislocation, exceeding 2 standard deviations"
+      }
+    },
+    "alert_thresholds": {
+      "z_score_threshold": 1.5,
+      "pxi_threshold": 1.0,
+      "pxi_jump_threshold": 0.5,
+      "deviation_threshold": 0.10
+    }
+  },
+  "data_sources": {
+    "FRED": {
+      "name": "Federal Reserve Economic Data",
+      "url": "https://fred.stlouisfed.org",
+      "api_key_required": true,
+      "indicators": ["HY_OAS", "IG_OAS", "VIX_Index", "U3_Unemployment", "USD_Index_Broad", "ChicagoFed_NFCI"]
+    },
+    "CoinGecko": {
+      "name": "CoinGecko API",
+      "url": "https://www.coingecko.com/en/api",
+      "api_key_required": false,
+      "indicators": ["BTC_Daily_Return"]
+    }
+  }
+}

@@ -22,15 +22,45 @@ All 7 indicators configured with complete metadata:
 
 | Indicator | Label | Series ID | Source | Risk Direction | Base Weight |
 |-----------|-------|-----------|--------|----------------|-------------|
-| hyOas | HY OAS | BAMLH0A0HYM2 | FRED | Higher = More Risk | 0.20 |
-| igOas | IG OAS | BAMLC0A4CBBB | FRED | Higher = More Risk | 0.15 |
-| vix | VIX Index | VIXCLS | FRED | Higher = More Risk | 0.15 |
-| u3 | U-3 Unemployment | UNRATE | FRED | Higher = More Risk | 0.10 |
-| usd | USD Index (Broad) | DTWEXBGS | FRED | Complex | 0.10 |
-| nfci | Chicago Fed NFCI | NFCI | FRED | Higher = More Risk | 0.20 |
-| btcReturn | Bitcoin Daily Return | bitcoin | CoinGecko | Volatility | 0.10 |
+| hyOas | HY OAS | BAMLH0A0HYM2 | FRED | `higher_is_more_risk` | 1.5 |
+| igOas | IG OAS | BAMLC0A4CBBB | FRED | `higher_is_more_risk` | 1.2 |
+| vix | VIX Index | VIXCLS | FRED | `higher_is_more_risk` | 1.8 |
+| u3 | U-3 Unemployment | UNRATE | FRED | `higher_is_more_risk` | 1.0 |
+| usd | USD Index (Broad) | DTWEXBGS | FRED | `higher_is_less_risk` | 0.8 |
+| nfci | Chicago Fed NFCI | NFCI | FRED | `higher_is_more_risk` | 1.3 |
+| btcReturn | Bitcoin Daily Return | bitcoin | CoinGecko | `higher_is_less_risk` | 1.0 |
 
-**Total Base Weight**: 1.00
+**Total Base Weight**: 8.7
+
+### Risk Direction Interpretation
+
+The `risk_direction` field indicates how changes in an indicator's value relate to overall market risk:
+
+**`higher_is_more_risk`** (5 indicators):
+- **HY OAS**: Higher spreads → Credit stress increasing
+- **IG OAS**: Higher spreads → Investment grade stress
+- **VIX**: Higher volatility → Fear increasing
+- **U-3**: Higher unemployment → Economic weakness
+- **NFCI**: Higher NFCI → Tighter financial conditions
+
+**`higher_is_less_risk`** (2 indicators):
+- **USD Index (Broad)**: Higher USD → Flight to safety (risk-off)
+- **BTC Daily Return**: Higher returns → Healthy risk appetite
+
+**Usage Example**:
+```typescript
+import { interpretValueChange } from './utils/riskDirection.js';
+
+// VIX increases by 5 points
+const vixChange = interpretValueChange('vix', 5.0);
+// Returns: { direction: 'increasing', riskImplication: 'increased_risk' }
+
+// USD Index increases by 2.5 points
+const usdChange = interpretValueChange('usd', 2.5);
+// Returns: { direction: 'increasing', riskImplication: 'decreased_risk' }
+```
+
+**Metadata File**: `metadata_indicators.json` contains full documentation of all indicators including risk direction, series IDs, sources, and descriptions.
 
 ---
 

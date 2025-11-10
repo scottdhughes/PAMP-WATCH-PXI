@@ -26,6 +26,11 @@ export interface MetricSample {
 }
 
 /**
+ * Risk direction type
+ */
+export type RiskDirection = 'higher_is_more_risk' | 'higher_is_less_risk';
+
+/**
  * Metric definition with bounds and weights
  */
 export interface PXIMetricDefinition {
@@ -35,6 +40,9 @@ export interface PXIMetricDefinition {
   upperBound: number;
   weight: number;
   polarity: 'positive' | 'negative';
+  riskDirection: RiskDirection;
+  seriesId: string;
+  source: 'FRED' | 'CoinGecko' | 'AlphaVantage' | 'TwelveData';
 }
 
 /**

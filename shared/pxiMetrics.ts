@@ -7,7 +7,7 @@
 import { PXIMetricDefinition, PXIBand } from './types.js';
 
 /**
- * Metric definitions with bounds and weights
+ * Metric definitions with bounds, weights, and risk direction
  */
 export const pxiMetricDefinitions: PXIMetricDefinition[] = [
   {
@@ -17,6 +17,9 @@ export const pxiMetricDefinitions: PXIMetricDefinition[] = [
     upperBound: 0.08,
     weight: 1.5,
     polarity: 'negative',
+    riskDirection: 'higher_is_more_risk',
+    seriesId: 'BAMLH0A0HYM2',
+    source: 'FRED',
   },
   {
     id: 'igOas',
@@ -25,6 +28,9 @@ export const pxiMetricDefinitions: PXIMetricDefinition[] = [
     upperBound: 0.03,
     weight: 1.2,
     polarity: 'negative',
+    riskDirection: 'higher_is_more_risk',
+    seriesId: 'BAMLC0A4CBBB',
+    source: 'FRED',
   },
   {
     id: 'vix',
@@ -33,6 +39,9 @@ export const pxiMetricDefinitions: PXIMetricDefinition[] = [
     upperBound: 25,
     weight: 1.8,
     polarity: 'negative',
+    riskDirection: 'higher_is_more_risk',
+    seriesId: 'VIXCLS',
+    source: 'FRED',
   },
   {
     id: 'u3',
@@ -41,6 +50,9 @@ export const pxiMetricDefinitions: PXIMetricDefinition[] = [
     upperBound: 0.06,
     weight: 1.0,
     polarity: 'negative',
+    riskDirection: 'higher_is_more_risk',
+    seriesId: 'UNRATE',
+    source: 'FRED',
   },
   {
     id: 'usd',
@@ -49,6 +61,9 @@ export const pxiMetricDefinitions: PXIMetricDefinition[] = [
     upperBound: 130,
     weight: 0.8,
     polarity: 'positive',
+    riskDirection: 'higher_is_less_risk',
+    seriesId: 'DTWEXBGS',
+    source: 'FRED',
   },
   {
     id: 'nfci',
@@ -57,6 +72,9 @@ export const pxiMetricDefinitions: PXIMetricDefinition[] = [
     upperBound: 0.5,
     weight: 1.3,
     polarity: 'negative',
+    riskDirection: 'higher_is_more_risk',
+    seriesId: 'NFCI',
+    source: 'FRED',
   },
   {
     id: 'btcReturn',
@@ -65,6 +83,9 @@ export const pxiMetricDefinitions: PXIMetricDefinition[] = [
     upperBound: 0.05,
     weight: 1.0,
     polarity: 'positive',
+    riskDirection: 'higher_is_less_risk',
+    seriesId: 'bitcoin',
+    source: 'CoinGecko',
   },
 ];
 
