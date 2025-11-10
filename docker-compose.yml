@@ -1,33 +1,59 @@
 version: '3.9'
+
 services:
   timescaledb:
     image: timescale/timescaledb:2.14.2-pg15
     environment:
-      POSTGRES_DB: pxi
-      POSTGRES_USER: pxi
-      POSTGRES_PASSWORD: changeme
+      POSTGRES_DB: ${POSTGRES_DB:-pxi}
+      POSTGRES_USER: ${POSTGRES_USER:-pxi}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
     ports:
-      - '5432:5432'
+      - '${POSTGRES_PORT:-5432}:5432'
     volumes:
       - timescale-data:/var/lib/postgresql/data
+      - ./migrations:/docker-entrypoint-initdb.d
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U pxi']
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-pxi}']
       interval: 10s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
+    networks:
+      - pxi-network
 
   api:
     build:
-      context: ..
-      dockerfile: infra/dockerfiles/api.Dockerfile
+      context: .
+      dockerfile: api.Dockerfile
     environment:
-      DATABASE_URL: postgres://pxi:changeme@timescaledb:5432/pxi
-      PORT: 8787
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL must be set}
+      FRED_API_KEY: ${FRED_API_KEY:?FRED_API_KEY must be set}
+      ALPHA_VANTAGE_API_KEY: ${ALPHA_VANTAGE_API_KEY:?ALPHA_VANTAGE_API_KEY must be set}
+      TWELVEDATA_API_KEY: ${TWELVEDATA_API_KEY:?TWELVEDATA_API_KEY must be set}
+      PORT: ${API_PORT:-8787}
+      HOST: ${API_HOST:-0.0.0.0}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      NODE_ENV: ${NODE_ENV:-production}
     ports:
-      - '8787:8787'
+      - '${API_PORT:-8787}:${API_PORT:-8787}'
     depends_on:
       timescaledb:
         condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - pxi-network
+    healthcheck:
+      test: ['CMD', 'wget', '--quiet', '--tries=1', '--spider', 'http://localhost:${API_PORT:-8787}/healthz']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
 volumes:
   timescale-data:
+    driver: local
+
+networks:
+  pxi-network:
+    driver: bridge

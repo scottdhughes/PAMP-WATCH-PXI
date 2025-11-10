@@ -2,9 +2,29 @@ import { fetchLatestFredObservation } from './clients/fredClient.js';
 import { fetchGlobalQuote } from './clients/alphaVantageClient.js';
 import { fetchLatestTwelveDataValue } from './clients/twelveDataClient.js';
 import { fetchBtcDailyReturn } from './clients/coinGeckoClient.js';
-import { MetricFetcher } from './types.js';
+import type { MetricFetcher, MetricSample } from './shared/types.js';
+import { logger } from './logger.js';
 
 const percent = (value: number): number => value / 100; // convert bps -> pct
+
+/**
+ * Wraps a fetcher function with error handling and logging
+ */
+function withErrorHandling(
+  id: string,
+  fetcher: () => Promise<MetricSample>,
+): () => Promise<MetricSample> {
+  return async () => {
+    try {
+      const result = await fetcher();
+      logger.debug({ metricId: id }, 'Successfully fetched metric');
+      return result;
+    } catch (error) {
+      logger.error({ metricId: id, error }, 'Failed to fetch metric');
+      throw new Error(`Fetch failed for ${id}: ${(error as Error).message}`);
+    }
+  };
+}
 
 export const metricFetchers: MetricFetcher[] = [
   {

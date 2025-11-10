@@ -1,1 +1,1 @@
-export * from '@pxi/shared';
+export * from './shared/pxiMetrics.js';

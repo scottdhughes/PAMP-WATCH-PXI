@@ -1,11 +1,11 @@
-import { fetchLatestComposites } from '../db.js';
+import { fetchLatestComposites } from './db.js';
 import {
   classifyMetricState,
   pxiBands,
   pxiMetricDefinitions,
   type MetricRow,
   type PXIResponse,
-} from '@pxi/shared';
+} from './shared/index.js';
 
 const definitionMap = new Map(pxiMetricDefinitions.map((def) => [def.id, def]));
 
