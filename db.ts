@@ -128,6 +128,95 @@ export const fetchLatestComposites = async (limit = 1): Promise<CompositeRecord[
 };
 
 /**
+ * Fetches the latest metric samples from the database
+ *
+ * @returns Array of latest metric samples, one per metric
+ */
+export const fetchLatestMetricSamples = async (): Promise<
+  Array<{
+    metricId: string;
+    metricLabel: string;
+    value: number;
+    unit: string;
+    sourceTimestamp: string;
+  }>
+> => {
+  let client: PoolClient | null = null;
+  try {
+    client = await pool.connect();
+    const result = await client.query(`
+      SELECT DISTINCT ON (metric_id)
+        metric_id as "metricId",
+        metric_label as "metricLabel",
+        value,
+        unit,
+        source_timestamp as "sourceTimestamp"
+      FROM pxi_metric_samples
+      ORDER BY metric_id, source_timestamp DESC
+    `);
+    logger.info({ count: result.rows.length }, 'Fetched latest metric samples');
+    return result.rows;
+  } catch (error) {
+    logger.error({ error }, 'Failed to fetch latest metric samples');
+    throw new Error(`Failed to fetch metric samples: ${(error as Error).message}`);
+  } finally {
+    if (client) {
+      client.release();
+    }
+  }
+};
+
+/**
+ * Inserts a new composite record into the database
+ *
+ * @param composite - Composite data to insert
+ * @returns The inserted composite record with ID
+ */
+export const insertComposite = async (composite: {
+  calculatedAt: string;
+  zScore: number;
+  pxi: number;
+  metrics: Array<{
+    id: string;
+    value: number;
+    zScore: number;
+    contribution: number;
+  }>;
+  breaches: {
+    pamp: string[];
+    stress: string[];
+    systemLevel: string | null;
+  };
+}): Promise<CompositeRecord> => {
+  let client: PoolClient | null = null;
+  try {
+    client = await pool.connect();
+    const result = await client.query(
+      `INSERT INTO pxi_composites
+        (calculated_at, z_score, pxi, metrics, breaches)
+      VALUES ($1, $2, $3, $4, $5)
+      RETURNING id, calculated_at as "calculatedAt", z_score as "zScore", pxi, metrics, breaches`,
+      [
+        composite.calculatedAt,
+        composite.zScore,
+        composite.pxi,
+        JSON.stringify(composite.metrics),
+        JSON.stringify(composite.breaches),
+      ],
+    );
+    logger.info({ pxi: composite.pxi }, 'Composite record inserted successfully');
+    return result.rows[0] as CompositeRecord;
+  } catch (error) {
+    logger.error({ error }, 'Failed to insert composite record');
+    throw new Error(`Failed to insert composite: ${(error as Error).message}`);
+  } finally {
+    if (client) {
+      client.release();
+    }
+  }
+};
+
+/**
  * Gracefully closes the database pool
  */
 export const closePool = async (): Promise<void> => {
