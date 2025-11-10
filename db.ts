@@ -314,6 +314,7 @@ export const insertContributions = async (
     baseWeight: number;
     actualWeight: number;
     weightMultiplier: number;
+    normalizedWeight: number;
     contribution: number;
   }>,
 ): Promise<void> => {
@@ -324,15 +325,18 @@ export const insertContributions = async (
     client = await pool.connect();
     const insertText = `
       INSERT INTO contributions
-        (indicator_id, timestamp, raw_value, z_score, base_weight, actual_weight, weight_multiplier, contribution)
+        (indicator_id, timestamp, raw_value, z_score, base_weight, actual_weight, weight_multiplier, normalized_weight, contribution)
       VALUES
         ${contributions
           .map((_, idx) =>
-            `($${idx * 8 + 1}, $${idx * 8 + 2}, $${idx * 8 + 3}, $${idx * 8 + 4}, $${idx * 8 + 5}, $${idx * 8 + 6}, $${idx * 8 + 7}, $${idx * 8 + 8})`
+            `($${idx * 9 + 1}, $${idx * 9 + 2}, $${idx * 9 + 3}, $${idx * 9 + 4}, $${idx * 9 + 5}, $${idx * 9 + 6}, $${idx * 9 + 7}, $${idx * 9 + 8}, $${idx * 9 + 9})`
           )
           .join(', ')}
       ON CONFLICT (indicator_id, timestamp)
-      DO UPDATE SET contribution = EXCLUDED.contribution, actual_weight = EXCLUDED.actual_weight
+      DO UPDATE SET
+        contribution = EXCLUDED.contribution,
+        actual_weight = EXCLUDED.actual_weight,
+        normalized_weight = EXCLUDED.normalized_weight
     `;
     const values = contributions.flatMap((c) => [
       c.indicatorId,
@@ -342,6 +346,7 @@ export const insertContributions = async (
       c.baseWeight,
       c.actualWeight,
       c.weightMultiplier,
+      c.normalizedWeight,
       c.contribution,
     ]);
 

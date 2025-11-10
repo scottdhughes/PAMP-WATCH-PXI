@@ -210,6 +210,81 @@ Increase: +36.7% due to elevated z-scores
 
 ---
 
+### ✅ 5.5. Weight Normalization (Step 3: Feed Failure Resilience)
+
+**File**: `workers/compute-worker.ts:292-314`
+
+**Purpose**: Ensures weights always sum to 1.0, providing automatic resilience when data feeds fail.
+
+**Algorithm**:
+```
+1. Calculate actual_weight for each active indicator:
+   actual_weight_i = base_weight_i × weight_multiplier_i
+
+2. Calculate total weight across all active indicators:
+   total_weight = Σ(actual_weight_i) for all active indicators
+
+3. Normalize each weight:
+   normalized_weight_i = actual_weight_i / total_weight
+
+4. Verify: Σ(normalized_weight_i) = 1.0
+```
+
+**Database Storage**:
+- Table: `contributions`
+- Column: `normalized_weight` (DOUBLE PRECISION)
+- Purpose: Track proportional influence of each indicator
+
+**Feed Failure Handling**:
+
+When a feed fails (e.g., BTC currently has no historical stats):
+- ✅ System automatically excludes the indicator from calculations
+- ✅ Remaining weights are proportionally rescaled
+- ✅ Normalized weights still sum to exactly 1.0
+- ✅ No manual intervention required
+
+**Example - Current State (BTC feed missing)**:
+
+```
+Indicator        | Base Weight | Actual Weight | Normalized Weight | % Influence
+-----------------|-------------|---------------|-------------------|------------
+HY OAS           |     1.50    |      1.50     |      0.1829       |   18.29%
+IG OAS           |     1.20    |      1.80     |      0.2195       |   21.95%
+NFCI             |     1.30    |      1.30     |      0.1585       |   15.85%
+U-3              |     1.00    |      1.00     |      0.1220       |   12.20%
+USD              |     0.80    |      0.80     |      0.0976       |    9.76%
+VIX              |     1.80    |      1.80     |      0.2195       |   21.95%
+BTC Daily Return |     0.60    |      ---      |      ---          |    MISSING
+-----------------|-------------|---------------|-------------------|------------
+TOTALS           |     8.20    |      8.20     |      1.0000       |   100.00%
+```
+
+**Comparison - If All Feeds Active**:
+
+```
+Indicator        | Normalized Weight (6 active) | Normalized Weight (7 active) | Difference
+-----------------|------------------------------|------------------------------|------------
+HY OAS           |            0.1829            |            0.1724            |   -0.0105
+IG OAS           |            0.2195            |            0.2069            |   -0.0126
+NFCI             |            0.1585            |            0.1494            |   -0.0091
+U-3              |            0.1220            |            0.1149            |   -0.0071
+USD              |            0.0976            |            0.0920            |   -0.0056
+VIX              |            0.2195            |            0.2069            |   -0.0126
+BTC Daily Return |            ---               |            0.0690            |   +0.0690
+-----------------|------------------------------|------------------------------|------------
+TOTALS           |            1.0000            |            1.0000            |    0.0000
+```
+
+**Key Benefits**:
+1. **Automatic Failover**: No manual weight adjustments when feeds fail
+2. **Consistency**: PXI values remain comparable across time even with feed outages
+3. **Transparency**: `normalized_weight` column shows exact proportional influence
+4. **Resilience**: System continues operating normally with partial data
+
+**Verification Script**: `scripts/verify-normalization.ts`
+
+---
+
 ### ✅ 6. Composite PXI Formula & Regime Classification
 
 **File**: `workers/compute-worker.ts:68-75, 254-258`

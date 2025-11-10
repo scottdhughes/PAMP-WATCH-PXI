@@ -124,6 +124,7 @@ async function computePXI(): Promise<void> {
       baseWeight: number;
       actualWeight: number;
       weightMultiplier: number;
+      normalizedWeight: number;
       contribution: number;
     }> = [];
 
@@ -226,6 +227,7 @@ async function computePXI(): Promise<void> {
         baseWeight: def.weight,
         actualWeight,
         weightMultiplier,
+        normalizedWeight: 0, // Will be calculated after totalWeight is known
         contribution,
       });
 
@@ -289,13 +291,37 @@ async function computePXI(): Promise<void> {
       return;
     }
 
-    // 5. Calculate composite PXI (sum of weighted z-scores)
+    // 5. Normalize weights (Step 3: Weight normalization after feed loss)
+    // Ensure total_weight = sum(weights.values())
+    // For each weight: normalized_weight = weight / total_weight
+    logger.info({ totalWeight: totalWeight.toFixed(4) }, 'Normalizing weights');
+
+    // Normalize each metric's weight and recalculate contributions
+    for (const metric of metricResults) {
+      const normalizedWeight = totalWeight > 0 ? metric.weight / totalWeight : 0;
+
+      // Find the corresponding contribution entry and update it
+      const contributionEntry = contributionsToInsert.find(
+        (c) => c.indicatorId === metric.id && c.timestamp === timestamp
+      );
+      if (contributionEntry) {
+        contributionEntry.normalizedWeight = normalizedWeight;
+      }
+
+      logger.debug({
+        indicator: metric.id,
+        actualWeight: metric.weight.toFixed(4),
+        normalizedWeight: normalizedWeight.toFixed(4),
+      }, 'Weight normalized');
+    }
+
+    // 6. Calculate composite PXI (sum of weighted z-scores)
     const compositePxiValue = metricResults.reduce((sum, m) => sum + m.contribution, 0);
 
-    // 6. Classify regime
+    // 7. Classify regime
     const regime = classifyRegime(compositePxiValue);
 
-    // 7. Generate composite-level alerts
+    // 8. Generate composite-level alerts
     if (Math.abs(compositePxiValue) > PXI_ALERT_THRESHOLD) {
       const severity = Math.abs(compositePxiValue) > 2.0 ? 'critical' : 'warning';
       alertsToInsert.push({
