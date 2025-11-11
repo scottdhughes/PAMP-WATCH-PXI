@@ -78,6 +78,35 @@ export default function Dashboard() {
   // Expanded state for System Internals
   const [expanded, setExpanded] = useState(false);
 
+  // Format history data for chart (MUST be before early return to satisfy Rules of Hooks)
+  const chartData = React.useMemo(() => {
+    return historyData?.history?.map((item: any) => ({
+      timestamp: new Date(item.timestamp).getTime(),
+      value: item.pxiValue,
+    })) || [];
+  }, [historyData]);
+
+  // Generate smart X-axis ticks (one per unique date)
+  const chartTicks = React.useMemo(() => {
+    if (!chartData.length) return [];
+
+    const uniqueDates = new Map<string, number>();
+    chartData.forEach((point) => {
+      const dateStr = new Date(point.timestamp).toLocaleDateString('en-US');
+      if (!uniqueDates.has(dateStr)) {
+        uniqueDates.set(dateStr, point.timestamp);
+      }
+    });
+
+    // Return timestamps for unique dates, max 10 ticks
+    const ticks = Array.from(uniqueDates.values());
+    if (ticks.length <= 10) return ticks;
+
+    // If more than 10 days, sample evenly
+    const step = Math.ceil(ticks.length / 10);
+    return ticks.filter((_, i) => i % step === 0 || i === ticks.length - 1);
+  }, [chartData]);
+
   const isLoading = isLoadingLatest || isLoadingCache || isLoadingRisk;
 
   if (isLoading) {
@@ -107,33 +136,6 @@ export default function Dashboard() {
 
   const regimeColor = getRegimeColor(regime);
   const regimeIcon = getRegimeIcon(regime);
-
-  // Format history data for chart
-  const chartData = historyData?.history?.map((item: any) => ({
-    timestamp: new Date(item.timestamp).getTime(),
-    value: item.pxiValue,
-  })) || [];
-
-  // Generate smart X-axis ticks (one per unique date)
-  const chartTicks = React.useMemo(() => {
-    if (!chartData.length) return [];
-
-    const uniqueDates = new Map<string, number>();
-    chartData.forEach((point) => {
-      const dateStr = new Date(point.timestamp).toLocaleDateString('en-US');
-      if (!uniqueDates.has(dateStr)) {
-        uniqueDates.set(dateStr, point.timestamp);
-      }
-    });
-
-    // Return timestamps for unique dates, max 10 ticks
-    const ticks = Array.from(uniqueDates.values());
-    if (ticks.length <= 10) return ticks;
-
-    // If more than 10 days, sample evenly
-    const step = Math.ceil(ticks.length / 10);
-    return ticks.filter((_, i) => i % step === 0 || i === ticks.length - 1);
-  }, [chartData]);
 
   const activeAlerts = (alertsData?.alerts || alertsData || [])
     .filter((alert: any) => alert.severity === 'critical' || alert.severity === 'warning')
