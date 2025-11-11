@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { useQuery } from 'react-query';
 import { fetcher } from '@/utils/fetcher';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -113,6 +113,27 @@ export default function Dashboard() {
     timestamp: new Date(item.timestamp).getTime(),
     value: item.pxiValue,
   })) || [];
+
+  // Generate smart X-axis ticks (one per unique date)
+  const chartTicks = React.useMemo(() => {
+    if (!chartData.length) return [];
+
+    const uniqueDates = new Map<string, number>();
+    chartData.forEach((point) => {
+      const dateStr = new Date(point.timestamp).toLocaleDateString('en-US');
+      if (!uniqueDates.has(dateStr)) {
+        uniqueDates.set(dateStr, point.timestamp);
+      }
+    });
+
+    // Return timestamps for unique dates, max 10 ticks
+    const ticks = Array.from(uniqueDates.values());
+    if (ticks.length <= 10) return ticks;
+
+    // If more than 10 days, sample evenly
+    const step = Math.ceil(ticks.length / 10);
+    return ticks.filter((_, i) => i % step === 0 || i === ticks.length - 1);
+  }, [chartData]);
 
   const activeAlerts = (alertsData?.alerts || alertsData || [])
     .filter((alert: any) => alert.severity === 'critical' || alert.severity === 'warning')
@@ -303,8 +324,7 @@ export default function Dashboard() {
                   stroke="#334155"
                   tick={{ fill: '#64748b', fontSize: 10 }}
                   tickFormatter={(value) => new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                  interval="preserveStartEnd"
-                  minTickGap={50}
+                  ticks={chartTicks}
                 />
                 <YAxis
                   stroke="#334155"
