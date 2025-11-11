@@ -5,7 +5,7 @@ This document contains atomic, copy-ready implementation prompts for expanding t
 ## Implementation Status
 
 - [ ] 1️⃣ FRED Metrics Expansion (3 metrics)
-- [ ] 2️⃣ Real-Time Refresh (60s polling)
+- [x] 2️⃣ Real-Time Refresh (60s polling) ✅ **COMPLETED**
 - [ ] 3️⃣ Regime Detection v1 (k-means)
 - [ ] 4️⃣ Backtesting v1 (rule engine)
 - [ ] 5️⃣ UX Primitives (deltas, sparklines)
@@ -98,12 +98,12 @@ This document contains atomic, copy-ready implementation prompts for expanding t
 - Stale display logic
 
 **Deliverables**:
-- [ ] `/v1/snapshot` endpoint
-- [ ] Version tracking system
-- [ ] Client polling with 60s interval
-- [ ] Stale indicator UI
-- [ ] Retry/backoff logic
-- [ ] Tests passing
+- [x] `/v1/snapshot` endpoint ✅
+- [x] Version tracking system ✅
+- [x] Client polling with 60s interval ✅
+- [x] Stale indicator UI ✅
+- [x] Retry/backoff logic ✅
+- [x] Tests passing ✅
 
 ---
 
