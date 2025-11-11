@@ -1,4 +1,5 @@
 import { Pool, PoolClient } from 'pg';
+import { mean, std } from 'mathjs';
 import { config } from './config.js';
 import { logger } from './logger.js';
 import type { CompositeRecord } from './shared/types.js';
@@ -44,7 +45,26 @@ export const testConnection = async (): Promise<boolean> => {
 };
 
 /**
- * Upserts metric samples into the database
+ * Calculate z-score for a metric value given historical data
+ */
+const calculateZScore = (value: number, historicalValues: number[]): number | null => {
+  if (historicalValues.length < 5) {
+    return null; // Not enough data for meaningful statistics
+  }
+
+  const μ = mean(historicalValues) as number;
+  const σ = std(historicalValues, 'unbiased') as number;
+
+  // Handle flatline data (zero standard deviation)
+  if (σ < 1e-9) {
+    return 0;
+  }
+
+  return (value - μ) / σ;
+};
+
+/**
+ * Upserts metric samples into the database with z-score calculation
  *
  * @param samples - Array of metric samples to insert
  * @throws Error if database operation fails
@@ -65,6 +85,8 @@ export const upsertMetricSamples = async (
   let client: PoolClient | null = null;
   try {
     client = await pool.connect();
+
+    // Step 1: Insert raw samples without z-scores
     const insertText = `
       INSERT INTO pxi_metric_samples
         (metric_id, metric_label, value, unit, source_timestamp, ingested_at, metadata)
@@ -88,7 +110,55 @@ export const upsertMetricSamples = async (
     ]);
 
     await client.query(insertText, values);
-    logger.info({ count: samples.length }, 'Metric samples upserted successfully');
+
+    // Step 2: Calculate and update z-scores for each metric
+    const uniqueMetrics = [...new Set(samples.map((s) => s.id))];
+
+    for (const metricId of uniqueMetrics) {
+      // Get samples for this metric that need z-scores
+      const metricSamples = samples.filter((s) => s.id === metricId);
+
+      // Fetch 90-day historical data for z-score calculation
+      const historicalResult = await client.query(
+        `SELECT value, source_timestamp
+         FROM pxi_metric_samples
+         WHERE metric_id = $1
+           AND source_timestamp >= NOW() - INTERVAL '90 days'
+         ORDER BY source_timestamp ASC`,
+        [metricId]
+      );
+
+      const historicalData = historicalResult.rows.map((r) => Number(r.value));
+
+      // Calculate z-score for each sample
+      for (const sample of metricSamples) {
+        // Get historical values up to (but not including) this timestamp
+        const sampleTimestamp = new Date(sample.sourceTimestamp);
+        const windowStart = new Date(sampleTimestamp);
+        windowStart.setDate(windowStart.getDate() - 90);
+
+        const relevantHistory = historicalResult.rows
+          .filter((r) => {
+            const ts = new Date(r.source_timestamp);
+            return ts >= windowStart && ts < sampleTimestamp;
+          })
+          .map((r) => Number(r.value));
+
+        const zScore = calculateZScore(sample.value, relevantHistory);
+
+        if (zScore !== null) {
+          // Update z-score for this sample
+          await client.query(
+            `UPDATE pxi_metric_samples
+             SET z_score = $1
+             WHERE metric_id = $2 AND source_timestamp = $3`,
+            [zScore, metricId, sample.sourceTimestamp]
+          );
+        }
+      }
+    }
+
+    logger.info({ count: samples.length, metrics: uniqueMetrics.length }, 'Metric samples upserted with z-scores');
   } catch (error) {
     logger.error({ error, sampleCount: samples.length }, 'Failed to upsert metric samples');
     throw new Error(`Database upsert failed: ${(error as Error).message}`);
