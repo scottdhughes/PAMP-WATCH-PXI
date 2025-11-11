@@ -188,7 +188,14 @@ async function computePXI(): Promise<void> {
 
       // Apply dynamic weighting
       const weightMultiplier = getWeightMultiplier(zScore);
-      const actualWeight = def.weight * weightMultiplier;
+
+      // Apply technical indicator signal multiplier (for BTC)
+      // Check if this metric has a signal multiplier in its metadata
+      const signalMultiplier = (sample.metadata && typeof sample.metadata.signalMultiplier === 'number')
+        ? sample.metadata.signalMultiplier
+        : 1.0;
+
+      const actualWeight = def.weight * weightMultiplier * signalMultiplier;
 
       // Apply directional multiplier based on risk_direction
       // higher_is_more_risk: direction = -1 (negative z-score [below normal] = positive contribution [less stress])

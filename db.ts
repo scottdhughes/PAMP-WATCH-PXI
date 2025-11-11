@@ -139,6 +139,7 @@ export const fetchLatestMetricSamples = async (): Promise<
     value: number;
     unit: string;
     sourceTimestamp: string;
+    metadata?: Record<string, unknown>;
   }>
 > => {
   let client: PoolClient | null = null;
@@ -150,7 +151,8 @@ export const fetchLatestMetricSamples = async (): Promise<
         metric_label as "metricLabel",
         value,
         unit,
-        source_timestamp as "sourceTimestamp"
+        source_timestamp as "sourceTimestamp",
+        metadata
       FROM pxi_metric_samples
       ORDER BY metric_id, source_timestamp DESC
     `);
@@ -585,6 +587,39 @@ export const fetchLatestRegime = async (): Promise<{
     return result.rows[0] || null;
   } catch (error) {
     logger.error({ error }, 'Failed to fetch latest regime');
+    throw error;
+  } finally {
+    if (client) {
+      client.release();
+    }
+  }
+};
+
+/**
+ * Fetches PXI historical values for analytics
+ *
+ * @param daysBack - Number of days of history to fetch (default: 90)
+ * @returns Array of PXI values ordered by timestamp ascending
+ */
+export const getPXIHistory = async (daysBack = 90): Promise<
+  Array<{
+    timestamp: string;
+    pxiValue: number;
+  }>
+> => {
+  let client: PoolClient | null = null;
+  try {
+    client = await pool.connect();
+    const result = await client.query(
+      `SELECT timestamp, pxi_value as "pxiValue"
+       FROM composite_pxi_regime
+       WHERE timestamp >= NOW() - INTERVAL '${daysBack} days'
+       ORDER BY timestamp ASC`,
+    );
+    logger.info({ count: result.rows.length, daysBack }, 'Fetched PXI history');
+    return result.rows;
+  } catch (error) {
+    logger.error({ error, daysBack }, 'Failed to fetch PXI history');
     throw error;
   } finally {
     if (client) {

@@ -1,5 +1,6 @@
 import { fetchLatestFredObservation } from './clients/fredClient.js';
-import { fetchBtcDailyReturn } from './clients/coinGeckoClient.js';
+import { fetchBtcDailyReturn, fetchBtcPricesForIndicators } from './clients/coinGeckoClient.js';
+import { calculateRSI, calculateMACD, calculateSignalMultiplier } from './utils/technicalIndicators.js';
 import type { MetricFetcher, MetricSample } from './shared/types.js';
 import { logger } from './logger.js';
 
@@ -119,7 +120,38 @@ export const metricFetchers: MetricFetcher[] = [
     id: 'btcReturn',
     label: 'BTC Daily Return',
     fetch: async () => {
+      // Fetch daily return
       const { value, timestamp, metadata } = await fetchBtcDailyReturn();
+
+      // Attempt to calculate technical indicators (RSI, MACD)
+      let rsi: number | null = null;
+      let macd: { MACD: number; signal: number; histogram: number } | null = null;
+      let signalMultiplier = 1.0;
+
+      try {
+        // Fetch 35 days of BTC prices for technical indicators
+        const prices = await fetchBtcPricesForIndicators(35);
+
+        // Calculate RSI (14-day)
+        rsi = calculateRSI(prices, 14);
+
+        // Calculate MACD (12, 26, 9)
+        macd = calculateMACD(prices, 12, 26, 9);
+
+        // Calculate signal multiplier based on RSI and MACD
+        signalMultiplier = calculateSignalMultiplier(rsi, macd);
+
+        logger.info(
+          { rsi, macd: macd?.MACD, signalMultiplier },
+          'BTC technical indicators calculated',
+        );
+      } catch (error) {
+        logger.warn(
+          { error: (error as Error).message },
+          'Failed to calculate BTC technical indicators, using default multiplier',
+        );
+      }
+
       return {
         id: 'btcReturn',
         label: 'BTC Daily Return',
@@ -127,7 +159,16 @@ export const metricFetchers: MetricFetcher[] = [
         unit: 'ratio',
         sourceTimestamp: timestamp,
         ingestedAt: new Date().toISOString(),
-        metadata,
+        metadata: {
+          ...metadata,
+          rsi,
+          macd: macd ? {
+            value: macd.MACD,
+            signal: macd.signal,
+            histogram: macd.histogram,
+          } : null,
+          signalMultiplier,
+        },
       };
     },
   },

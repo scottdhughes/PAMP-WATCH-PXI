@@ -184,3 +184,25 @@ export const calculateDailyReturns = (
 
   return returns;
 };
+
+/**
+ * Fetches BTC closing prices for technical indicator calculation
+ *
+ * This function fetches enough historical data to calculate RSI (14-day) and MACD (26-day)
+ *
+ * @param days - Number of days to fetch (default: 35 - enough for MACD)
+ * @returns Array of closing prices (most recent last)
+ * @throws Error if the request fails
+ */
+export const fetchBtcPricesForIndicators = async (
+  days: number = 35,
+): Promise<number[]> => {
+  try {
+    const priceData = await fetchBtcHistoricalPrices(days);
+    // Return just the prices in chronological order (oldest first, newest last)
+    return priceData.map((p) => p.price);
+  } catch (error) {
+    logger.error({ error, days }, 'Failed to fetch BTC prices for technical indicators');
+    throw error;
+  }
+};
