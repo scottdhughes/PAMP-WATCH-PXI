@@ -114,48 +114,76 @@ export const upsertMetricSamples = async (
     // Step 2: Calculate and update z-scores for each metric
     const uniqueMetrics = [...new Set(samples.map((s) => s.id))];
 
+    // Optimization: Fetch all historical data in a single query
+    const historicalResult = await client.query(
+      `SELECT metric_id, value, source_timestamp
+       FROM pxi_metric_samples
+       WHERE metric_id = ANY($1)
+         AND source_timestamp >= NOW() - INTERVAL '90 days'
+       ORDER BY metric_id, source_timestamp ASC`,
+      [uniqueMetrics]
+    );
+
+    // Group historical data by metric_id for efficient lookups
+    const historicalByMetric = new Map<string, Array<{ value: number; timestamp: Date }>>();
+    historicalResult.rows.forEach((r) => {
+      if (!historicalByMetric.has(r.metric_id)) {
+        historicalByMetric.set(r.metric_id, []);
+      }
+      historicalByMetric.get(r.metric_id)!.push({
+        value: Number(r.value),
+        timestamp: new Date(r.source_timestamp),
+      });
+    });
+
+    // Calculate z-scores for all samples and collect updates
+    const zScoreUpdates: Array<{ metricId: string; timestamp: string; zScore: number }> = [];
+
     for (const metricId of uniqueMetrics) {
-      // Get samples for this metric that need z-scores
       const metricSamples = samples.filter((s) => s.id === metricId);
+      const historicalData = historicalByMetric.get(metricId) || [];
 
-      // Fetch 90-day historical data for z-score calculation
-      const historicalResult = await client.query(
-        `SELECT value, source_timestamp
-         FROM pxi_metric_samples
-         WHERE metric_id = $1
-           AND source_timestamp >= NOW() - INTERVAL '90 days'
-         ORDER BY source_timestamp ASC`,
-        [metricId]
-      );
-
-      const historicalData = historicalResult.rows.map((r) => Number(r.value));
-
-      // Calculate z-score for each sample
       for (const sample of metricSamples) {
-        // Get historical values up to (but not including) this timestamp
         const sampleTimestamp = new Date(sample.sourceTimestamp);
         const windowStart = new Date(sampleTimestamp);
         windowStart.setDate(windowStart.getDate() - 90);
 
-        const relevantHistory = historicalResult.rows
-          .filter((r) => {
-            const ts = new Date(r.source_timestamp);
-            return ts >= windowStart && ts < sampleTimestamp;
-          })
-          .map((r) => Number(r.value));
+        // Filter historical data to rolling window BEFORE sample timestamp
+        const relevantHistory = historicalData
+          .filter((h) => h.timestamp >= windowStart && h.timestamp < sampleTimestamp)
+          .map((h) => h.value);
 
         const zScore = calculateZScore(sample.value, relevantHistory);
 
         if (zScore !== null) {
-          // Update z-score for this sample
-          await client.query(
-            `UPDATE pxi_metric_samples
-             SET z_score = $1
-             WHERE metric_id = $2 AND source_timestamp = $3`,
-            [zScore, metricId, sample.sourceTimestamp]
-          );
+          zScoreUpdates.push({
+            metricId,
+            timestamp: sample.sourceTimestamp,
+            zScore,
+          });
         }
       }
+    }
+
+    // Batch update z-scores using a temporary table (more efficient than individual UPDATEs)
+    if (zScoreUpdates.length > 0) {
+      const updateValues = zScoreUpdates
+        .map((_, idx) => `($${idx * 3 + 1}, $${idx * 3 + 2}, $${idx * 3 + 3})`)
+        .join(', ');
+
+      const updateParams = zScoreUpdates.flatMap((u) => [
+        u.metricId,
+        u.timestamp,
+        u.zScore,
+      ]);
+
+      await client.query(`
+        UPDATE pxi_metric_samples AS pms
+        SET z_score = v.z_score::double precision
+        FROM (VALUES ${updateValues}) AS v(metric_id, source_timestamp, z_score)
+        WHERE pms.metric_id = v.metric_id::text
+          AND pms.source_timestamp = v.source_timestamp::timestamptz
+      `, updateParams);
     }
 
     logger.info({ count: samples.length, metrics: uniqueMetrics.length }, 'Metric samples upserted with z-scores');
