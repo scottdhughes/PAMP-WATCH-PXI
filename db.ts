@@ -209,6 +209,7 @@ export const fetchLatestMetricSamples = async (): Promise<
     value: number;
     unit: string;
     sourceTimestamp: string;
+    zScore?: number;
     metadata?: Record<string, unknown>;
   }>
 > => {
@@ -222,11 +223,12 @@ export const fetchLatestMetricSamples = async (): Promise<
         value,
         unit,
         source_timestamp as "sourceTimestamp",
+        z_score as "zScore",
         metadata
       FROM pxi_metric_samples
       ORDER BY metric_id, source_timestamp DESC
     `);
-    logger.info({ count: result.rows.length }, 'Fetched latest metric samples');
+    logger.info({ count: result.rows.length }, 'Fetched latest metric samples with z-scores');
     return result.rows;
   } catch (error) {
     logger.error({ error }, 'Failed to fetch latest metric samples');

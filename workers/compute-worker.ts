@@ -167,24 +167,36 @@ async function computePXI(): Promise<void> {
 
     for (const def of pxiMetricDefinitions) {
       const sample = sampleMap.get(def.id);
-      const stats = statsMap.get(def.id);
 
       if (!sample) {
         logger.warn({ metricId: def.id }, 'No sample found for metric');
         continue;
       }
 
+      // Fetch stats for this metric (needed for database inserts)
+      const stats = statsMap.get(def.id);
       if (!stats) {
         logger.warn({ metricId: def.id }, 'No historical stats found for metric');
         continue;
       }
 
-      // Calculate statistical z-score
-      const zScore = calculateStatisticalZScore(
-        sample.value,
-        stats.mean,
-        stats.stddev,
-      );
+      // Use pre-calculated z-score from database if available
+      // Fall back to calculating from historical stats for backward compatibility
+      let zScore: number;
+
+      if (sample.zScore !== undefined && sample.zScore !== null && isFinite(sample.zScore)) {
+        // Use stored z-score (calculated during ingestion with rolling 90-day window)
+        zScore = sample.zScore;
+        logger.debug({ metricId: def.id, zScore: zScore.toFixed(3) }, 'Using stored z-score');
+      } else {
+        // Fall back to calculating from historical stats
+        zScore = calculateStatisticalZScore(
+          sample.value,
+          stats.mean,
+          stats.stddev,
+        );
+        logger.debug({ metricId: def.id, zScore: zScore.toFixed(3) }, 'Calculated z-score from historical stats');
+      }
 
       // Apply dynamic weighting
       const weightMultiplier = getWeightMultiplier(zScore);
