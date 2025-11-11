@@ -13,6 +13,7 @@
     "worker:compute": "tsx workers/compute-worker.ts",
     "worker:backfill": "tsx workers/backfill-worker.ts",
     "worker:backfill:btc": "tsx workers/backfill-btc-worker.ts",
+    "worker:indicators:daily": "tsx workers/daily-indicator-worker.ts",
     "worker:run": "npm run worker:ingest && npm run worker:compute",
     "test": "vitest"
   },

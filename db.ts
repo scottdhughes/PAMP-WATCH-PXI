@@ -629,6 +629,118 @@ export const getPXIHistory = async (daysBack = 90): Promise<
 };
 
 /**
+ * Insert daily BTC technical indicators into cache
+ *
+ * @param data - Technical indicator data to cache
+ * @returns Promise that resolves when insert completes
+ */
+export const insertDailyIndicators = async (data: {
+  date: string;
+  rsi: number | null;
+  macd: { value: number; signal: number; histogram: number } | null;
+  signalMultiplier: number;
+}): Promise<void> => {
+  let client: PoolClient | null = null;
+  try {
+    client = await pool.connect();
+    await client.query(
+      `INSERT INTO btc_daily_indicators
+        (date, rsi, macd_value, macd_signal, macd_histogram, signal_multiplier)
+      VALUES ($1, $2, $3, $4, $5, $6)
+      ON CONFLICT (date)
+      DO UPDATE SET
+        rsi = EXCLUDED.rsi,
+        macd_value = EXCLUDED.macd_value,
+        macd_signal = EXCLUDED.macd_signal,
+        macd_histogram = EXCLUDED.macd_histogram,
+        signal_multiplier = EXCLUDED.signal_multiplier,
+        updated_at = NOW()`,
+      [
+        data.date,
+        data.rsi,
+        data.macd?.value ?? null,
+        data.macd?.signal ?? null,
+        data.macd?.histogram ?? null,
+        data.signalMultiplier,
+      ],
+    );
+    logger.info(
+      {
+        date: data.date,
+        rsi: data.rsi,
+        signalMultiplier: data.signalMultiplier,
+      },
+      'Daily indicators inserted successfully',
+    );
+  } catch (error) {
+    logger.error({ error, date: data.date }, 'Failed to insert daily indicators');
+    throw error;
+  } finally {
+    if (client) {
+      client.release();
+    }
+  }
+};
+
+/**
+ * Fetch latest cached BTC technical indicators
+ *
+ * @returns Latest indicator data or null if no cache exists
+ */
+export const fetchLatestIndicators = async (): Promise<{
+  date: string;
+  rsi: number | null;
+  macdValue: number | null;
+  macdSignal: number | null;
+  macdHistogram: number | null;
+  signalMultiplier: number;
+  createdAt: string;
+  updatedAt: string;
+} | null> => {
+  let client: PoolClient | null = null;
+  try {
+    client = await pool.connect();
+    const result = await client.query(
+      `SELECT
+        date,
+        rsi,
+        macd_value as "macdValue",
+        macd_signal as "macdSignal",
+        macd_histogram as "macdHistogram",
+        signal_multiplier as "signalMultiplier",
+        created_at as "createdAt",
+        updated_at as "updatedAt"
+      FROM btc_daily_indicators
+      ORDER BY date DESC
+      LIMIT 1`,
+    );
+
+    if (result.rows.length === 0) {
+      logger.warn('No cached indicators found in database');
+      return null;
+    }
+
+    const cached = result.rows[0];
+    logger.debug(
+      {
+        date: cached.date,
+        age_hours: ((Date.now() - new Date(cached.updatedAt).getTime()) / (1000 * 60 * 60)).toFixed(1),
+      },
+      'Fetched cached indicators',
+    );
+
+    return cached;
+  } catch (error) {
+    logger.error({ error }, 'Failed to fetch latest indicators');
+    throw error;
+  } finally {
+    if (client) {
+      client.release();
+    }
+  }
+};
+
+/**
  * Gracefully closes the database pool
  */
 export const closePool = async (): Promise<void> => {

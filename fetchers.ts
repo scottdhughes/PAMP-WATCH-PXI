@@ -1,8 +1,12 @@
 import { fetchLatestFredObservation } from './clients/fredClient.js';
 import { fetchBtcDailyReturn, fetchBtcPricesForIndicators } from './clients/coinGeckoClient.js';
 import { calculateRSI, calculateMACD, calculateSignalMultiplier } from './utils/technicalIndicators.js';
+import { fetchLatestIndicators } from './db.js';
 import type { MetricFetcher, MetricSample } from './shared/types.js';
 import { logger } from './logger.js';
+
+// Stale cache threshold (48 hours)
+const STALE_CACHE_THRESHOLD_MS = 48 * 60 * 60 * 1000;
 
 const percent = (value: number): number => value / 100; // convert bps -> pct
 
@@ -123,33 +127,75 @@ export const metricFetchers: MetricFetcher[] = [
       // Fetch daily return
       const { value, timestamp, metadata } = await fetchBtcDailyReturn();
 
-      // Attempt to calculate technical indicators (RSI, MACD)
+      // Fetch cached technical indicators from database
       let rsi: number | null = null;
-      let macd: { MACD: number; signal: number; histogram: number } | null = null;
+      let macd: { value: number; signal: number; histogram: number } | null = null;
       let signalMultiplier = 1.0;
+      let indicatorSource = 'none';
 
       try {
-        // Fetch 35 days of BTC prices for technical indicators
-        const prices = await fetchBtcPricesForIndicators(35);
+        const cached = await fetchLatestIndicators();
 
-        // Calculate RSI (14-day)
-        rsi = calculateRSI(prices, 14);
+        if (cached) {
+          const cacheAge = Date.now() - new Date(cached.updatedAt).getTime();
 
-        // Calculate MACD (12, 26, 9)
-        macd = calculateMACD(prices, 12, 26, 9);
+          // Check if cache is stale (> 48 hours)
+          if (cacheAge > STALE_CACHE_THRESHOLD_MS) {
+            const ageHours = (cacheAge / (1000 * 60 * 60)).toFixed(1);
+            logger.warn(
+              { ageHours, threshold: 48 },
+              'Cache is stale, falling back to live calculation',
+            );
 
-        // Calculate signal multiplier based on RSI and MACD
-        signalMultiplier = calculateSignalMultiplier(rsi, macd);
+            // FALLBACK: Calculate indicators live
+            const prices = await fetchBtcPricesForIndicators(35);
+            rsi = calculateRSI(prices, 14);
+            macd = calculateMACD(prices, 12, 26, 9);
+            signalMultiplier = calculateSignalMultiplier(rsi, macd);
+            indicatorSource = 'live_fallback';
 
-        logger.info(
-          { rsi, macd: macd?.MACD, signalMultiplier },
-          'BTC technical indicators calculated',
-        );
+            logger.info(
+              { rsi, macd: macd?.MACD, signalMultiplier, source: indicatorSource },
+              'BTC indicators calculated live (cache stale)',
+            );
+          } else {
+            // Use cached values
+            rsi = cached.rsi;
+            macd = cached.macdValue !== null ? {
+              value: cached.macdValue,
+              signal: cached.macdSignal!,
+              histogram: cached.macdHistogram!,
+            } : null;
+            signalMultiplier = cached.signalMultiplier;
+            indicatorSource = 'daily_cache';
+
+            const ageHours = (cacheAge / (1000 * 60 * 60)).toFixed(1);
+            logger.debug(
+              { rsi, signalMultiplier, ageHours },
+              'Using cached BTC indicators',
+            );
+          }
+        } else {
+          // No cache exists - calculate live (first run)
+          logger.warn('No cached indicators found, calculating live (first run)');
+
+          const prices = await fetchBtcPricesForIndicators(35);
+          rsi = calculateRSI(prices, 14);
+          macd = calculateMACD(prices, 12, 26, 9);
+          signalMultiplier = calculateSignalMultiplier(rsi, macd);
+          indicatorSource = 'live_first_run';
+
+          logger.info(
+            { rsi, macd: macd?.MACD, signalMultiplier },
+            'BTC indicators calculated live (first run)',
+          );
+        }
       } catch (error) {
-        logger.warn(
+        logger.error(
           { error: (error as Error).message },
-          'Failed to calculate BTC technical indicators, using default multiplier',
+          'Failed to fetch/calculate BTC indicators, using default multiplier',
         );
+        indicatorSource = 'error_fallback';
       }
 
       return {
@@ -163,11 +209,12 @@ export const metricFetchers: MetricFetcher[] = [
           ...metadata,
           rsi,
           macd: macd ? {
-            value: macd.MACD,
+            value: macd.value,
             signal: macd.signal,
             histogram: macd.histogram,
           } : null,
           signalMultiplier,
+          indicatorSource, // Track where indicators came from
         },
       };
     },

@@ -4,7 +4,7 @@ import rateLimit from '@fastify/rate-limit';
 import { buildLatestResponse } from './buildLatestResponse.js';
 import { logger } from './logger.js';
 import { config } from './config.js';
-import { pool, testConnection, getPXIHistory } from './db.js';
+import { pool, testConnection, getPXIHistory, fetchLatestIndicators } from './db.js';
 import {
   calculateSharpeRatio,
   calculateMaxDrawdown,
@@ -324,6 +324,65 @@ server.get('/v1/pxi/analytics/risk-metrics', async (request, reply) => {
     return reply.code(500).send({
       error: 'Internal server error',
       message: 'Failed to calculate risk metrics',
+    });
+  }
+});
+
+/**
+ * BTC Indicator Cache Status
+ * Shows when indicators were last updated and cache freshness
+ */
+server.get('/v1/pxi/indicators/cache-status', async (request, reply) => {
+  try {
+    const cached = await fetchLatestIndicators();
+
+    if (!cached) {
+      return reply.code(404).send({
+        cached: false,
+        message: 'No cached indicators found - daily worker has not run yet',
+      });
+    }
+
+    const now = Date.now();
+    const updatedAt = new Date(cached.updatedAt).getTime();
+    const ageMs = now - updatedAt;
+    const ageHours = ageMs / (1000 * 60 * 60);
+
+    const STALE_THRESHOLD = 48; // hours
+    const WARNING_THRESHOLD = 36; // hours
+
+    let status: 'fresh' | 'warning' | 'stale';
+    if (ageHours > STALE_THRESHOLD) {
+      status = 'stale';
+    } else if (ageHours > WARNING_THRESHOLD) {
+      status = 'warning';
+    } else {
+      status = 'fresh';
+    }
+
+    return {
+      cached: true,
+      status,
+      date: cached.date,
+      updatedAt: cached.updatedAt,
+      ageHours: Number(ageHours.toFixed(1)),
+      thresholds: {
+        warning: WARNING_THRESHOLD,
+        stale: STALE_THRESHOLD,
+      },
+      indicators: {
+        rsi: cached.rsi !== null ? Number(cached.rsi.toFixed(2)) : null,
+        macdValue: cached.macdValue !== null ? Number(cached.macdValue.toFixed(2)) : null,
+        macdSignal: cached.macdSignal !== null ? Number(cached.macdSignal.toFixed(2)) : null,
+        signalMultiplier: Number(cached.signalMultiplier.toFixed(3)),
+      },
+      nextUpdate: 'Twice daily at 00:05 and 12:05 UTC',
+    };
+  } catch (error) {
+    logger.error({ error, reqId: request.id }, 'Failed to fetch indicator cache status');
+    return reply.code(500).send({
+      error: 'Internal server error',
+      message: 'Failed to fetch cache status',
     });
   }
 });
