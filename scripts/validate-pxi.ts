@@ -95,27 +95,27 @@ async function validatePXI(): Promise<ValidationResult> {
 
   console.log(`Latest PXI: ${storedPXI} at ${pxiTimestamp}`);
 
-  // Fetch all metrics for the latest composite
+  // Fetch the most recent value for each metric AT OR BEFORE the PXI timestamp
+  // This handles metrics with different update frequencies (BTC minutely, VIX daily, U3 monthly)
   const metricsResult = await pool.query(`
-    SELECT
+    SELECT DISTINCT ON (metric_id)
       metric_id,
       value,
       z_score,
       source_timestamp
     FROM pxi_metric_samples
-    WHERE DATE(source_timestamp) = DATE($1)
-    ORDER BY source_timestamp DESC
+    WHERE source_timestamp <= $1
+    ORDER BY metric_id, source_timestamp DESC
   `, [pxiTimestamp]);
 
-  // Get most recent value for each metric
-  const metricMap = new Map<string, { value: number; zScore: number }>();
+  // Build metric map (now includes timestamp for z-score validation)
+  const metricMap = new Map<string, { value: number; zScore: number; timestamp: Date }>();
   metricsResult.rows.forEach((row) => {
-    if (!metricMap.has(row.metric_id)) {
-      metricMap.set(row.metric_id, {
-        value: Number(row.value),
-        zScore: Number(row.z_score),
-      });
-    }
+    metricMap.set(row.metric_id, {
+      value: Number(row.value),
+      zScore: Number(row.z_score),
+      timestamp: new Date(row.source_timestamp),
+    });
   });
 
   console.log(`Found ${metricMap.size} metrics for validation`);
@@ -131,13 +131,17 @@ async function validatePXI(): Promise<ValidationResult> {
     ORDER BY metric_id, source_timestamp ASC
   `);
 
-  const historicalData = new Map<string, number[]>();
+  // Build historical data map: metricId -> array of {value, timestamp}
+  const historicalData = new Map<string, Array<{ value: number; timestamp: Date }>>();
   historicalResult.rows.forEach((row) => {
     const metricId = row.metric_id;
     if (!historicalData.has(metricId)) {
       historicalData.set(metricId, []);
     }
-    historicalData.get(metricId)!.push(Number(row.value));
+    historicalData.get(metricId)!.push({
+      value: Number(row.value),
+      timestamp: new Date(row.source_timestamp),
+    });
   });
 
   console.log(`Loaded historical data for ${historicalData.size} metrics`);
@@ -184,8 +188,34 @@ async function validatePXI(): Promise<ValidationResult> {
       continue;
     }
 
-    // Recompute z-score
-    const recomputed = recomputeZScore(metricData.value, historicalSeries);
+    // Filter historical series to only include data BEFORE the metric's timestamp
+    // This matches the ingestion logic and avoids look-ahead bias
+    const metricTimestamp = metricData.timestamp;
+    const windowStart = new Date(metricTimestamp);
+    windowStart.setDate(windowStart.getDate() - VALIDATION_WINDOW_DAYS);
+
+    const filteredHistory = historicalSeries
+      .filter((h) => h.timestamp >= windowStart && h.timestamp < metricTimestamp)
+      .map((h) => h.value);
+
+    if (filteredHistory.length < 5) {
+      errors.push(`Insufficient filtered historical data for ${def.id} (${filteredHistory.length} points)`);
+      failedMetrics++;
+      metricValidations.push({
+        metricId: def.id,
+        label: def.label,
+        storedValue: metricData.value,
+        storedZScore: metricData.zScore,
+        recomputedZScore: NaN,
+        zScoreDiff: NaN,
+        passed: false,
+        reason: `Insufficient filtered historical data (${filteredHistory.length} points)`,
+      });
+      continue;
+    }
+
+    // Recompute z-score using filtered historical data
+    const recomputed = recomputeZScore(metricData.value, filteredHistory);
 
     if (!recomputed) {
       errors.push(`Failed to recompute z-score for ${def.id}`);
