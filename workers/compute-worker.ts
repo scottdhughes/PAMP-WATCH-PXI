@@ -307,8 +307,19 @@ async function computePXI(): Promise<void> {
     logger.info({ totalWeight: totalWeight.toFixed(4) }, 'Normalizing weights');
 
     // Normalize each metric's weight and recalculate contributions
+    let compositePxiValue = 0;
     for (const metric of metricResults) {
       const normalizedWeight = totalWeight > 0 ? metric.weight / totalWeight : 0;
+
+      // Recalculate contribution with normalized weight
+      // Apply direction multiplier based on risk_direction
+      const def = defMap.get(metric.id)!;
+      const direction = def.riskDirection === 'higher_is_more_risk' ? -1 : 1;
+      const normalizedContribution = normalizedWeight * metric.zScore * direction;
+
+      // Update metric result with normalized contribution
+      metric.contribution = normalizedContribution;
+      compositePxiValue += normalizedContribution;
 
       // Find the corresponding contribution entry and update it
       const contributionEntry = contributionsToInsert.find(
@@ -316,22 +327,42 @@ async function computePXI(): Promise<void> {
       );
       if (contributionEntry) {
         contributionEntry.normalizedWeight = normalizedWeight;
+        contributionEntry.contribution = normalizedContribution;
       }
 
       logger.debug({
         indicator: metric.id,
+        zScore: metric.zScore.toFixed(3),
         actualWeight: metric.weight.toFixed(4),
         normalizedWeight: normalizedWeight.toFixed(4),
-      }, 'Weight normalized');
+        contribution: normalizedContribution.toFixed(4),
+      }, 'Weight normalized and contribution recalculated');
     }
 
-    // 6. Calculate composite PXI (sum of weighted z-scores)
-    const compositePxiValue = metricResults.reduce((sum, m) => sum + m.contribution, 0);
+    // 6. Round composite PXI to realistic precision
+    compositePxiValue = parseFloat(compositePxiValue.toFixed(3));
 
-    // 7. Classify regime
+    // 7. Clamp to realistic range (-3σ to +3σ max)
+    if (compositePxiValue > 3) compositePxiValue = 3;
+    if (compositePxiValue < -3) compositePxiValue = -3;
+
+    // Debug: Log detailed contribution breakdown
+    logger.info('=== PXI Contribution Breakdown ===');
+    console.table(metricResults.map(m => ({
+      metric: m.id,
+      z: m.zScore.toFixed(3),
+      weight: (m.weight / totalWeight).toFixed(4),
+      contribution: m.contribution.toFixed(4),
+    })));
+    logger.info({
+      compositePxi: compositePxiValue.toFixed(3),
+      weightSum: metricResults.reduce((sum, m) => sum + (m.weight / totalWeight), 0).toFixed(4),
+    }, 'Composite PXI calculation summary');
+
+    // 8. Classify regime
     const regime = classifyRegime(compositePxiValue);
 
-    // 8. Generate composite-level alerts
+    // 9. Generate composite-level alerts
     if (Math.abs(compositePxiValue) > PXI_ALERT_THRESHOLD) {
       const severity = Math.abs(compositePxiValue) > 2.0 ? 'critical' : 'warning';
       alertsToInsert.push({
@@ -366,7 +397,7 @@ async function computePXI(): Promise<void> {
 
     previousPxi = compositePxiValue;
 
-    // 8. Insert into new enhanced tables
+    // 10. Insert into new enhanced tables
     await insertZScores(zScoresToInsert);
     await insertContributions(contributionsToInsert);
     await insertCompositePxiRegime({
@@ -381,7 +412,7 @@ async function computePXI(): Promise<void> {
     await insertHistoricalValues(historyValuesToInsert);
     await insertAlerts(alertsToInsert);
 
-    // 9. Also insert into legacy composite table for backward compatibility
+    // 11. Also insert into legacy composite table for backward compatibility
     // Store the actual PXI value (not converted to 0-100 scale)
     // The frontend will display the raw PXI value along with the regime
     const pxiDisplay = compositePxiValue;

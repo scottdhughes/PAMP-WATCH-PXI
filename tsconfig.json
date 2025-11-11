@@ -5,6 +5,10 @@
     "allowJs": true,
     "noEmit": true,
     "baseUrl": ".",
+    "paths": {
+      "@/*": ["./*"],
+      "@pxi/shared": ["packages/shared/src/index.ts"]
+    },
     "lib": [
       "dom",
       "dom.iterable",

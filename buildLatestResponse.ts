@@ -80,9 +80,13 @@ export const buildLatestResponse = async (): Promise<PXIResponse | null> => {
       }
     : undefined;
 
+  // Use actual regime name instead of bands (PXI is z-score, not 0-100)
+  const regimeName = regime?.regime || band.label;
+  const pxiDisplay = latest.pxi >= 0 ? `+${latest.pxi.toFixed(2)}` : latest.pxi.toFixed(2);
+
   const response: PXIResponse = {
     pxi: latest.pxi,
-    statusLabel: `${band.label} - ${latest.pxi.toFixed(1)}`,
+    statusLabel: `${regimeName} – ${pxiDisplay}`,
     zScore: latest.zScore,
     calculatedAt: latest.calculatedAt,
     metrics,

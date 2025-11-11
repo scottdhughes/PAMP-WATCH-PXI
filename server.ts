@@ -138,6 +138,56 @@ server.get('/pxi/latest', async (request, reply) => {
 });
 
 /**
+ * V1 API: Get latest PXI metrics only (for dashboard grid)
+ * Returns just the underlying metrics array with z-scores and contributions
+ */
+server.get('/v1/pxi/metrics/latest', async (request, reply) => {
+  try {
+    // Check cache first
+    if (config.cacheEnabled) {
+      const cached = getFromCache<any[]>('pxi:metrics:latest');
+      if (cached) {
+        reply.header('X-Cache', 'HIT');
+        return { metrics: cached };
+      }
+    }
+
+    const data = await buildLatestResponse();
+    if (!data || !data.metrics) {
+      return reply.code(503).send({ message: 'PXI metrics not ready' });
+    }
+
+    // Transform metrics to include all necessary fields
+    const metrics = data.metrics.map(metric => ({
+      id: metric.id,
+      label: metric.label,
+      value: metric.value,
+      delta: metric.delta || 0,
+      lower: metric.lower,
+      upper: metric.upper,
+      zScore: metric.zScore,
+      contribution: metric.contribution,
+      status: metric.breach || 'Unknown',
+      unit: metric.unit || 'value',
+    }));
+
+    // Cache the metrics
+    if (config.cacheEnabled) {
+      setInCache('pxi:metrics:latest', metrics, config.cacheTtlSeconds);
+      reply.header('X-Cache', 'MISS');
+    }
+
+    return { metrics };
+  } catch (error) {
+    logger.error({ error, reqId: request.id }, 'Failed to fetch PXI metrics');
+    return reply.code(500).send({
+      error: 'Internal server error',
+      message: 'Failed to fetch PXI metrics',
+    });
+  }
+});
+
+/**
  * Analytics: Sharpe Ratio
  * Returns risk-adjusted return metric for PXI composite
  */
@@ -383,6 +433,48 @@ server.get('/v1/pxi/indicators/cache-status', async (request, reply) => {
     return reply.code(500).send({
       error: 'Internal server error',
       message: 'Failed to fetch cache status',
+    });
+  }
+});
+
+/**
+ * Historical PXI Data
+ * Returns time-series PXI data for charting
+ */
+server.get('/v1/pxi/history', async (request, reply) => {
+  try {
+    const { days = 30 } = request.query as { days?: number };
+    const daysToFetch = Math.min(Math.max(Number(days) || 30, 1), 90); // Limit to 1-90 days
+
+    const cacheKey = `pxi:history:${daysToFetch}`;
+
+    // Check cache
+    if (config.cacheEnabled) {
+      const cached = getFromCache<Awaited<ReturnType<typeof getPXIHistory>>>(cacheKey);
+      if (cached) {
+        reply.header('X-Cache', 'HIT');
+        return { history: cached, days: daysToFetch };
+      }
+    }
+
+    const history = await getPXIHistory(daysToFetch);
+
+    // Cache the result
+    if (config.cacheEnabled) {
+      setInCache(cacheKey, history, config.cacheTtlSeconds);
+      reply.header('X-Cache', 'MISS');
+    }
+
+    return {
+      history,
+      days: daysToFetch,
+      count: history.length,
+    };
+  } catch (error) {
+    logger.error({ error, reqId: request.id }, 'Failed to fetch PXI history');
+    return reply.code(500).send({
+      error: 'Internal server error',
+      message: 'Failed to fetch PXI history',
     });
   }
 });
