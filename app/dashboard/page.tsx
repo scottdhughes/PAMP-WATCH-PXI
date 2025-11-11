@@ -6,6 +6,8 @@ import { fetcher } from '@/utils/fetcher';
 import { motion, AnimatePresence } from 'framer-motion';
 import { LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip } from 'recharts';
 import clsx from 'clsx';
+import { useDashboardSnapshot } from '@/hooks/useDashboardSnapshot';
+import { StaleIndicator } from '@/components/StaleIndicator';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8787';
 
@@ -66,45 +68,27 @@ const formatMetricValue = (metric: any) => {
 };
 
 export default function Dashboard() {
-  // Fetch latest PXI data
-  const { data: latestData, isLoading: isLoadingLatest } = useQuery(
-    'pxi-latest',
-    () => fetcher<any>(`${API_BASE}/v1/pxi/latest`),
-    { refetchInterval: 30000 }
-  );
+  // Use snapshot polling hook (replaces all individual queries)
+  const snapshot = useDashboardSnapshot();
 
-  // Fetch cache status (includes BTC indicators)
+  // Fetch cache status (still separate - not in snapshot)
   const { data: cacheData, isLoading: isLoadingCache } = useQuery(
     'cache-status',
     () => fetcher<any>(`${API_BASE}/v1/pxi/indicators/cache-status`),
     { refetchInterval: 30000 }
   );
 
-  // Fetch risk metrics
+  // Fetch risk metrics (still separate - not in snapshot)
   const { data: riskData, isLoading: isLoadingRisk } = useQuery(
     'risk-metrics',
     () => fetcher<any>(`${API_BASE}/v1/pxi/analytics/risk-metrics`),
     { refetchInterval: 30000 }
   );
 
-  // Fetch historical PXI data for chart
+  // Fetch historical PXI data for chart (still separate - not in snapshot)
   const { data: historyData } = useQuery(
     'pxi-history',
     () => fetcher<any>(`${API_BASE}/v1/pxi/history?days=30`),
-    { refetchInterval: 60000 }
-  );
-
-  // Fetch alerts
-  const { data: alertsData } = useQuery(
-    'alerts',
-    () => fetcher<any>(`${API_BASE}/v1/pxi/alerts`).catch(() => []),
-    { refetchInterval: 30000 }
-  );
-
-  // Fetch PXI metrics for grid display
-  const { data: metricsData } = useQuery(
-    'pxi-metrics',
-    () => fetcher<any>(`${API_BASE}/v1/pxi/metrics/latest`),
     { refetchInterval: 60000 }
   );
 
@@ -159,7 +143,7 @@ export default function Dashboard() {
     return ticks.filter((_, i) => i % step === 0 || i === ticks.length - 1);
   }, [chartData]);
 
-  const isLoading = isLoadingLatest || isLoadingCache || isLoadingRisk;
+  const isLoading = snapshot.isLoading || isLoadingCache || isLoadingRisk;
 
   if (isLoading) {
     return (
@@ -172,11 +156,15 @@ export default function Dashboard() {
     );
   }
 
-  const pxiValue = latestData?.pxi || 0;
-  const regime = latestData?.regime?.regime || 'Unknown';
-  const statusLabel = latestData?.statusLabel || 'Unknown';
-  const calculatedAt = latestData?.calculatedAt ? new Date(latestData.calculatedAt) : new Date();
-  const metricCount = latestData?.metrics?.length || 0;
+  // Extract data from snapshot
+  const snapshotData = snapshot.data;
+  const pxiValue = snapshotData?.pxi || 0;
+  const regime = snapshotData?.regime?.regime || 'Unknown';
+  const statusLabel = snapshotData?.statusLabel || 'Unknown';
+  const calculatedAt = snapshotData?.calculatedAt ? new Date(snapshotData.calculatedAt) : new Date();
+  const metricCount = snapshotData?.metrics?.length || 0;
+  const metrics = snapshotData?.metrics || [];
+  const alerts = snapshotData?.alerts || [];
 
   const rsi = cacheData?.indicators?.rsi || null;
   const macd = cacheData?.indicators?.macdValue || null;
@@ -189,7 +177,8 @@ export default function Dashboard() {
   const regimeColor = getRegimeColor(regime);
   const regimeIcon = getRegimeIcon(regime);
 
-  const activeAlerts = (alertsData?.alerts || alertsData || [])
+  // Filter active alerts from snapshot
+  const activeAlerts = alerts
     .filter((alert: any) => alert.severity === 'critical' || alert.severity === 'warning')
     .slice(0, 3);
 
@@ -206,6 +195,16 @@ export default function Dashboard() {
         <p className="text-slate-500 text-xs md:text-sm tracking-wide">
           Real-time composite systemic stress index
         </p>
+        {/* Stale indicator */}
+        <div className="mt-3 flex items-center justify-center">
+          <StaleIndicator
+            isStale={snapshot.isStale}
+            timeSinceUpdate={snapshot.timeSinceUpdate}
+            lastUpdate={snapshot.lastUpdate}
+            error={snapshot.error}
+            retryCount={snapshot.retryCount}
+          />
+        </div>
       </header>
 
       {/* Regime Indicator */}
@@ -245,13 +244,13 @@ export default function Dashboard() {
       </main>
 
       {/* Underlying Metrics Grid */}
-      {metricsData?.metrics && (
+      {metrics.length > 0 && (
         <section className="mt-10 max-w-5xl w-full text-center">
           <h3 className="text-slate-400 text-sm mb-4 tracking-wide uppercase">
             Underlying PXI Metrics
           </h3>
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-y-6 gap-x-4 text-sm text-slate-300">
-            {metricsData.metrics.map((m: any) => (
+            {metrics.map((m: any) => (
               <div key={m.id} className="flex flex-col items-center">
                 <p className="text-slate-500 text-xs mb-1 text-center">{m.label}</p>
                 <p className={clsx("font-semibold text-base font-mono", {
@@ -278,7 +277,7 @@ export default function Dashboard() {
 
       {/* Expandable System Internals Table */}
       <AnimatePresence>
-        {expanded && metricsData?.metrics && (
+        {expanded && metrics.length > 0 && (
           <motion.section
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -302,7 +301,7 @@ export default function Dashboard() {
                 </tr>
               </thead>
               <tbody>
-                {metricsData.metrics.map((m: any) => (
+                {metrics.map((m: any) => (
                   <tr key={m.id} className="border-b border-slate-800/50 hover:bg-slate-800/20 transition-colors">
                     <td className="px-3 py-3 font-medium">{m.label}</td>
                     <td className="px-3 py-3 font-mono">{formatMetricValue(m)}</td>
@@ -487,7 +486,7 @@ export default function Dashboard() {
       {/* Footer */}
       <footer className="mt-8 md:mt-12 text-center text-slate-700 text-xs pb-6">
         <div className="border-t border-slate-900 pt-6">
-          <p>Auto-refresh: 30s · Command interface v1.0</p>
+          <p>Auto-refresh: 60s · Version-based atomic updates · Command interface v1.0</p>
         </div>
       </footer>
     </div>

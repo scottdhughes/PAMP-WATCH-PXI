@@ -193,6 +193,55 @@ server.get('/v1/pxi/metrics/latest', async (request, reply) => {
 });
 
 /**
+ * V1 API: Get complete dashboard snapshot (for real-time polling)
+ * Returns all dashboard data in one call with version for change detection
+ */
+server.get('/v1/snapshot', async (request, reply) => {
+  try {
+    // Check cache first
+    if (config.cacheEnabled) {
+      const cached = getFromCache<any>('pxi:snapshot');
+      if (cached) {
+        reply.header('X-Cache', 'HIT');
+        return cached;
+      }
+    }
+
+    const data = await buildLatestResponse();
+    if (!data) {
+      return reply.code(503).send({ message: 'PXI data not ready' });
+    }
+
+    // Return complete snapshot with version
+    const snapshot = {
+      version: data.version,
+      pxi: data.pxi,
+      statusLabel: data.statusLabel,
+      zScore: data.zScore,
+      calculatedAt: data.calculatedAt,
+      metrics: data.metrics,
+      ticker: data.ticker,
+      alerts: data.alerts,
+      regime: data.regime,
+    };
+
+    // Cache the snapshot
+    if (config.cacheEnabled) {
+      setInCache('pxi:snapshot', snapshot, config.cacheTtlSeconds);
+      reply.header('X-Cache', 'MISS');
+    }
+
+    return snapshot;
+  } catch (error) {
+    logger.error({ error, reqId: request.id }, 'Failed to fetch dashboard snapshot');
+    return reply.code(500).send({
+      error: 'Internal server error',
+      message: 'Failed to fetch dashboard snapshot',
+    });
+  }
+});
+
+/**
  * Analytics: Sharpe Ratio
  * Returns risk-adjusted return metric for PXI composite
  */

@@ -126,6 +126,7 @@ export interface PXIResponse {
   ticker: string[];
   alerts?: Alert[];
   regime?: Regime;
+  version?: string; // Timestamp-based version for change detection
 }
 
 /**

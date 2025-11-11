@@ -199,6 +199,9 @@ export const buildLatestResponse = async (): Promise<PXIResponse | null> => {
   const regimeName = regime?.regime || band.label;
   const pxiDisplay = latest.pxi >= 0 ? `+${latest.pxi.toFixed(2)}` : latest.pxi.toFixed(2);
 
+  // Generate version string for change detection (use ISO timestamp)
+  const version = new Date().toISOString();
+
   const response: PXIResponse = {
     pxi: latest.pxi,
     statusLabel: `${regimeName} – ${pxiDisplay}`,
@@ -208,6 +211,7 @@ export const buildLatestResponse = async (): Promise<PXIResponse | null> => {
     ticker,
     alerts: alertsFormatted.length > 0 ? alertsFormatted : undefined,
     regime,
+    version,
   };
   return response;
 };
