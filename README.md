@@ -1,8 +1,8 @@
 # PAMP Index (PXI) Platform
 
-> **Production-ready financial metrics aggregation platform** with real-time monitoring, comprehensive error handling, and enterprise security features.
+> **Production-ready financial stress index platform** with statistical z-score analysis, 10-year historical backtesting, real-time monitoring, and enterprise-grade security.
 
-A TypeScript-based platform that aggregates macro/market data every minute from multiple financial APIs (FRED, AlphaVantage, TwelveData, CoinGecko), computes a composite PAMP Index, and exposes the data via a RESTful API with Next.js dashboard.
+A TypeScript-based platform that aggregates macro/market data from multiple financial APIs (FRED, AlphaVantage, TwelveData, CoinGecko), computes a normalized composite PXI using statistical z-scores with dynamic weighting, and provides real-time visualization via a Next.js dashboard with 30-day historical trend analysis.
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.4-blue.svg)](https://www.typescriptlang.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-20-green.svg)](https://nodejs.org/)
@@ -32,11 +32,19 @@ A TypeScript-based platform that aggregates macro/market data every minute from 
 ## ✨ Features
 
 ### Core Functionality
-- **Real-time Data Ingestion**: Fetches 7 metrics every minute from multiple financial APIs
-- **Composite Index Calculation**: Computes PXI score with z-score normalization and breach detection
-- **RESTful API**: Versioned API with caching, rate limiting, and CORS security
-- **Live Dashboard**: Next.js + Tailwind CSS dashboard with 60-second auto-refresh
-- **Time-Series Database**: TimescaleDB with automatic retention policies and continuous aggregates
+- **Statistical Z-Score Analysis**: Calculates z-scores using 10-year rolling window statistics (365-day mean/stddev)
+- **Normalized Weight Calculation**: Ensures weights sum to 1.0 with proper contribution scaling
+- **Dynamic Weighting**: α=1.5 multiplier for |z|>1.0, β=2.0 for |z|>2.0, plus BTC technical indicator signals
+- **Historical Data System**: 30+ days of backfilled PXI data with forward-fill logic for infrequent metrics
+- **Real-time Data Ingestion**: Fetches 7 metrics with retry logic and exponential backoff
+- **Enhanced Dashboard**: Minimalist command-center design with:
+  - Real-time PXI display with regime indicators
+  - 30-day historical trend chart (Recharts)
+  - Expandable system internals with full metric breakdown
+  - Auto-refresh every 30 seconds (React Query)
+  - Framer Motion animations
+- **RESTful API**: Versioned API with multiple endpoints for analytics, history, and risk metrics
+- **Time-Series Database**: TimescaleDB with enhanced schema for z-scores, contributions, and alerts
 
 ### Production Features
 - ✅ **Error Handling**: Comprehensive error handling with retry logic and exponential backoff
@@ -92,10 +100,26 @@ A TypeScript-based platform that aggregates macro/market data every minute from 
 
 ```
 PAMP-WATCH-PXI/
+├── app/                         # Next.js App Router
+│   ├── dashboard/page.tsx       # Ornn-style minimalist dashboard
+│   ├── layout.tsx               # Root layout with React Query provider
+│   └── providers.tsx            # React Query client configuration
+│
 ├── shared/                      # Shared types and configuration
 │   ├── types.ts                 # TypeScript type definitions
-│   ├── pxiMetrics.ts           # Metric bounds, weights, and classification
+│   ├── pxiMetrics.ts           # Metric bounds, weights, risk directions
 │   └── index.ts                 # Module exports
+│
+├── workers/                     # Background computation workers
+│   ├── compute-worker.ts        # Enhanced PXI calculation with normalized weights
+│   ├── ingest-worker.ts         # Real-time data ingestion
+│   ├── backfill-worker.ts       # Historical FRED data (10 years)
+│   ├── backfill-btc-worker.ts   # Historical BTC data (1 year)
+│   └── daily-indicator-worker.ts # BTC technical indicators (RSI/MACD)
+│
+├── scripts/                     # Database and utility scripts
+│   ├── populate-historical-pxi-v3.sql  # Forward-fill historical PXI
+│   └── compute-historical-pxi.ts       # TypeScript backfill alternative
 │
 ├── clients/                     # External API clients (with retry logic)
 │   ├── fredClient.ts           # Federal Reserve Economic Data
@@ -104,22 +128,20 @@ PAMP-WATCH-PXI/
 │   └── coinGeckoClient.ts      # CoinGecko (BTC)
 │
 ├── migrations/                  # Database migrations
-│   └── 001_initial_schema.sql  # TimescaleDB setup with indexes
+│   ├── 001_initial_schema.sql  # TimescaleDB setup
+│   ├── 002_enhanced_schema.sql # Z-scores, contributions, alerts
+│   └── 003_btc_indicators.sql  # Technical indicators table
 │
-├── components/                  # React UI components
-│   ├── Dashboard.tsx            # Main dashboard container
-│   ├── Hero.tsx                 # PXI display header
-│   ├── Gauge.tsx                # Visual gauge component
-│   ├── CompositeBar.tsx         # PXI band visualization
-│   ├── MetricsTable.tsx         # Detailed metrics grid
-│   └── Ticker.tsx               # Alert ticker
+├── utils/                       # Utility functions
+│   ├── fetcher.ts              # API fetch utility for React Query
+│   └── analytics.ts            # Risk metrics (Sharpe, Sortino, drawdown)
 │
 ├── config.ts                    # Environment variable validation
-├── db.ts                        # Database connection pool & queries
-├── server.ts                    # Fastify API server
+├── db.ts                        # Database connection pool & enhanced queries
+├── server.ts                    # Fastify API with multiple endpoints
 ├── fetchers.ts                  # Metric fetcher orchestration
 ├── validator.ts                 # Input validation with hard limits
-├── buildLatestResponse.ts       # API response builder
+├── buildLatestResponse.ts       # API response builder (regime-aware)
 ├── logger.ts                    # Pino logger configuration
 ├── monitoring.ts                # Stale feed detection
 │
@@ -249,6 +271,91 @@ See `.env.example` for a complete list. Key variables:
 
 ---
 
+## 🧮 PXI Calculation Methodology
+
+### Statistical Z-Score Analysis
+
+The PXI uses a **normalized statistical approach** based on 10-year rolling window z-scores:
+
+```typescript
+z-score = (current_value - rolling_mean) / rolling_stddev
+```
+
+- **Rolling Window**: 365-day historical statistics for each metric
+- **Normalization**: Weights are normalized to sum = 1.0
+- **Direction**: Risk direction multipliers ensure consistent interpretation
+  - `higher_is_more_risk` (e.g., VIX): direction = -1
+  - `higher_is_less_risk` (e.g., HY OAS): direction = 1
+
+### Dynamic Weighting
+
+Weights are dynamically adjusted based on z-score magnitude:
+
+| Z-Score Range | Multiplier | Description |
+|---------------|------------|-------------|
+| \|z\| ≤ 1.0 | 1.0 | Normal conditions |
+| 1.0 < \|z\| ≤ 2.0 | α = 1.5 | Elevated signal |
+| \|z\| > 2.0 | β = 2.0 | Strong signal |
+
+### BTC Technical Indicators
+
+Bitcoin returns include a **signal multiplier** from technical analysis:
+
+```typescript
+signal_multiplier = 1.0 + (RSI - 50) / 100 + (MACD_histogram > 0 ? 0.1 : -0.1)
+```
+
+- **RSI (14-day)**: Relative Strength Index
+- **MACD (12,26,9)**: Moving Average Convergence Divergence
+- **Update Frequency**: Twice daily (00:05 and 12:05 UTC)
+
+### Composite Calculation
+
+```typescript
+// 1. Normalize weights to sum = 1.0
+normalized_weight[i] = actual_weight[i] / total_weight
+
+// 2. Calculate contributions
+contribution[i] = normalized_weight[i] × z_score[i] × direction[i]
+
+// 3. Sum contributions
+PXI = Σ contribution[i]
+
+// 4. Clamp to realistic range
+PXI = clamp(PXI, -3, 3)
+```
+
+### Regime Classification
+
+| PXI Range | Regime | Interpretation |
+|-----------|--------|----------------|
+| PXI > 2.0 | Strong PAMP | Very low systemic stress |
+| 1.0 < PXI ≤ 2.0 | Moderate PAMP | Low stress |
+| -1.0 ≤ PXI ≤ 1.0 | Normal | Normal conditions |
+| -2.0 ≤ PXI < -1.0 | Elevated Stress | Heightened stress |
+| PXI < -2.0 | Crisis | High systemic stress |
+
+### Example Output
+
+```
+Metric      Z-Score  Weight   Contribution
+─────────────────────────────────────────
+hyOas       -0.854   0.1648   +0.1408
+igOas       -1.113   0.1978   +0.2203
+vix         +0.078   0.1978   -0.0155
+u3          -0.168   0.1099   +0.0185
+usd         +0.939   0.0879   +0.0826
+nfci        -0.420   0.1429   +0.0600
+btcReturn   -0.099   0.0989   -0.0098
+─────────────────────────────────────────
+                              = +0.497
+
+Regime: Stable
+Weight Sum: 1.0000
+```
+
+---
+
 ## 🗄 Database Setup
 
 ### Migration
@@ -295,12 +402,21 @@ Automatically maintained hourly rollups for analytics.
 
 ```bash
 # Development
-npm run dev          # Start Next.js dev server
-npm run server       # Start API server (requires compiled JS)
+npm run dev          # Start Next.js dashboard dev server (localhost:3000)
+npm run server       # Start API server (localhost:8787)
 
 # Build
 npm run build        # Build Next.js application
 npm run compile      # Compile TypeScript to JavaScript
+
+# Workers
+npm run worker:compute        # Run PXI calculation worker (one-time)
+npm run worker:backfill       # Backfill 10 years of FRED historical data
+npm run worker:backfill:btc   # Backfill 1 year of BTC historical data
+npm run worker:ingest         # Manual data ingestion run
+
+# Historical Data
+psql $DATABASE_URL -f scripts/populate-historical-pxi-v3.sql  # Populate 30 days of historical PXI
 
 # Testing
 npm run test         # Run tests with Vitest
@@ -389,7 +505,7 @@ Health check endpoint with database connectivity test.
 ```
 
 #### `GET /v1/pxi/latest`
-Fetch the latest PXI composite data.
+Fetch the latest PXI composite data with regime classification.
 
 **Headers:**
 - `X-Cache`: `HIT` or `MISS` (cache status)
@@ -397,9 +513,9 @@ Fetch the latest PXI composite data.
 **Response:**
 ```json
 {
-  "pxi": 67.3,
-  "statusLabel": "Stable - 67.3",
-  "zScore": 0.45,
+  "pxi": 0.497,
+  "statusLabel": "Stable – +0.50",
+  "zScore": 0.497,
   "calculatedAt": "2025-11-10T12:00:00Z",
   "metrics": [
     {
@@ -409,24 +525,124 @@ Fetch the latest PXI composite data.
       "delta": 0.001,
       "lower": 0.03,
       "upper": 0.08,
-      "zScore": -0.5,
-      "contribution": 0.12,
+      "zScore": -0.854,
+      "contribution": 0.1408,
       "breach": "Stable"
     }
-    // ... more metrics
   ],
-  "ticker": [
-    "VIX Index - PAMP",
-    "HY OAS - Stress"
+  "ticker": ["VIX Index - PAMP"],
+  "alerts": [
+    {
+      "id": 123,
+      "alertType": "high_z_score",
+      "indicatorId": "vix",
+      "timestamp": "2025-11-10T12:00:00Z",
+      "zScore": 2.1,
+      "message": "VIX z-score 2.10 exceeds threshold",
+      "severity": "warning"
+    }
+  ],
+  "regime": {
+    "regime": "Stable",
+    "pxiValue": 0.497,
+    "totalWeight": 9.1,
+    "pampCount": 0,
+    "stressCount": 0
+  }
+}
+```
+
+#### `GET /v1/pxi/metrics/latest`
+Get underlying metrics with z-scores and contributions.
+
+**Response:**
+```json
+{
+  "metrics": [
+    {
+      "id": "hyOas",
+      "label": "HY OAS",
+      "value": 0.045,
+      "delta": 0.001,
+      "lower": 0.03,
+      "upper": 0.08,
+      "zScore": -0.854,
+      "contribution": 0.1408,
+      "status": "Stable",
+      "unit": "decimal"
+    }
   ]
 }
 ```
 
-**Status Codes:**
-- `200 OK`: Success
-- `503 Service Unavailable`: PXI composite not ready
-- `500 Internal Server Error`: Server error
-- `429 Too Many Requests`: Rate limit exceeded
+#### `GET /v1/pxi/history?days=30`
+Get historical PXI data for charting.
+
+**Query Parameters:**
+- `days` (optional): Number of days to fetch (1-90, default: 30)
+
+**Response:**
+```json
+{
+  "history": [
+    {
+      "timestamp": "2025-10-12T12:00:00.000Z",
+      "pxiValue": -0.453,
+      "regime": "Stable"
+    }
+  ],
+  "days": 30,
+  "count": 44
+}
+```
+
+#### `GET /v1/pxi/analytics/risk-metrics`
+Get comprehensive risk analytics (Sharpe, Sortino, max drawdown, volatility).
+
+**Response:**
+```json
+{
+  "sharpe": 1.2345,
+  "sortino": 1.5678,
+  "maxDrawdown": {
+    "maxDrawdownPercent": 15.23,
+    "peakValue": 2.5,
+    "troughValue": -1.2,
+    "peakIndex": 10,
+    "troughIndex": 25,
+    "peakTimestamp": "2025-10-15T12:00:00Z",
+    "troughTimestamp": "2025-10-20T12:00:00Z"
+  },
+  "volatility": 12.45,
+  "cumulativeReturn": 8.9,
+  "daysAnalyzed": 85
+}
+```
+
+#### `GET /v1/pxi/indicators/cache-status`
+Get BTC technical indicators cache status.
+
+**Response:**
+```json
+{
+  "cached": true,
+  "status": "fresh",
+  "date": "2025-11-10",
+  "updatedAt": "2025-11-10T12:05:00Z",
+  "ageHours": 2.5,
+  "thresholds": {
+    "warning": 36,
+    "stale": 48
+  },
+  "indicators": {
+    "rsi": 45.67,
+    "macdValue": 123.45,
+    "macdSignal": 120.32,
+    "signalMultiplier": 1.025
+  },
+  "nextUpdate": "Twice daily at 00:05 and 12:05 UTC"
+}
+```
 
 #### `GET /pxi/latest` (Legacy)
 Redirects to `/v1/pxi/latest` with 301 status.
