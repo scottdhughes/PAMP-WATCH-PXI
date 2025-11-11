@@ -379,6 +379,49 @@ server.get('/v1/pxi/analytics/risk-metrics', async (request, reply) => {
 });
 
 /**
+ * Alerts Endpoint
+ * Fetch recent PXI alerts (warnings and critical)
+ */
+server.get('/v1/pxi/alerts', async (request, reply) => {
+  try {
+    const query = `
+      SELECT
+        alert_type,
+        indicator_id,
+        timestamp,
+        raw_value,
+        z_score,
+        weight,
+        contribution,
+        threshold,
+        message,
+        severity,
+        acknowledged,
+        created_at
+      FROM alerts
+      WHERE acknowledged = false
+        AND timestamp >= NOW() - INTERVAL '7 days'
+      ORDER BY timestamp DESC, severity DESC
+      LIMIT 50
+    `;
+
+    const result = await pool.query(query);
+
+    return {
+      alerts: result.rows,
+      count: result.rows.length,
+      timestamp: new Date().toISOString(),
+    };
+  } catch (error) {
+    logger.error({ error, reqId: request.id }, 'Failed to fetch alerts');
+    return reply.code(500).send({
+      error: 'Internal server error',
+      message: 'Failed to fetch alerts',
+    });
+  }
+});
+
+/**
  * BTC Indicator Cache Status
  * Shows when indicators were last updated and cache freshness
  */
