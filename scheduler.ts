@@ -5,9 +5,15 @@
  * Continuously ingests all 7 metrics and computes PXI every minute:
  * - HY OAS, IG OAS, VIX, U3, USD, NFCI, BTC Returns
  *
+ * Also runs nightly data validation at 2 AM:
+ * - Statistical sanity checks (outliers, flatlines, invalid values)
+ * - Correlation analysis and structural shift detection
+ * - Data quality monitoring with health status tracking
+ *
  * Features:
  * - Robust error handling with retry logic
  * - Sequential execution (ingest → compute)
+ * - Nightly validation for data quality assurance
  * - Health monitoring and metrics tracking
  * - Graceful shutdown
  * - Prevents overlapping runs
@@ -22,17 +28,25 @@ const execAsync = promisify(exec);
 
 // Scheduler configuration
 const CRON_SCHEDULE = '* * * * *'; // Every minute
+const VALIDATION_SCHEDULE = '0 2 * * *'; // 2 AM daily
 const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 5000; // 5 seconds
 const EXECUTION_TIMEOUT_MS = 55000; // 55 seconds (before next cron)
 
-// Metrics tracking
+// Metrics tracking - Data Pipeline
 let lastSuccessfulRun: Date | null = null;
 let consecutiveFailures = 0;
 let totalRuns = 0;
 let totalSuccesses = 0;
 let totalFailures = 0;
 let isRunning = false;
+
+// Metrics tracking - Validation
+let lastValidationRun: Date | null = null;
+let lastValidationStatus: 'pass' | 'fail' | null = null;
+let totalValidationRuns = 0;
+let totalValidationPasses = 0;
+let totalValidationFailures = 0;
 
 /**
  * Execute a command with timeout and retry logic
@@ -156,6 +170,80 @@ async function runDataPipeline(): Promise<void> {
 }
 
 /**
+ * Run nightly data validation
+ */
+async function runValidation(): Promise<void> {
+  totalValidationRuns++;
+  const startTime = Date.now();
+
+  try {
+    logger.info('🔍 Starting nightly data validation');
+
+    // Run validation script (note: script exits with code 1 if validation fails)
+    const result = await execAsync('tsx scripts/validate-data.ts', {
+      maxBuffer: 10 * 1024 * 1024
+    });
+
+    const duration = Date.now() - startTime;
+    lastValidationRun = new Date();
+    lastValidationStatus = 'pass';
+    totalValidationPasses++;
+
+    // Extract key metrics from output
+    const metricsValidatedMatch = result.stdout.match(/metricsValidated: (\d+)/);
+    const passedMatch = result.stdout.match(/passed: (\d+)/);
+    const failedMatch = result.stdout.match(/failed: (\d+)/);
+
+    const metricsValidated = metricsValidatedMatch ? metricsValidatedMatch[1] : 'unknown';
+    const passed = passedMatch ? passedMatch[1] : 'unknown';
+    const failed = failedMatch ? failedMatch[1] : 'unknown';
+
+    logger.info(
+      {
+        metricsValidated,
+        passed,
+        failed,
+        duration,
+        validationPassRate: totalValidationRuns > 0
+          ? ((totalValidationPasses / totalValidationRuns) * 100).toFixed(1) + '%'
+          : '0%',
+      },
+      '✅ Validation completed successfully'
+    );
+  } catch (error) {
+    lastValidationRun = new Date();
+    lastValidationStatus = 'fail';
+    totalValidationFailures++;
+    const duration = Date.now() - startTime;
+
+    // Parse error output for details
+    const errorMessage = (error as any).message || 'Unknown error';
+    const stderr = (error as any).stderr || '';
+    const stdout = (error as any).stdout || '';
+
+    // Extract anomaly information if present
+    const brokenMetrics = stdout.match(/brokenMetrics: \[([^\]]*)\]/);
+    const anomalies = stdout.match(/anomalies: \[([^\]]*)\]/);
+
+    logger.warn(
+      {
+        error: errorMessage,
+        brokenMetrics: brokenMetrics ? brokenMetrics[1] : 'none',
+        anomalies: anomalies ? anomalies[1] : 'none',
+        duration,
+        validationFailRate: totalValidationRuns > 0
+          ? ((totalValidationFailures / totalValidationRuns) * 100).toFixed(1) + '%'
+          : '0%',
+      },
+      '⚠️  Validation failed - anomalies detected'
+    );
+
+    // Log warning but don't treat as critical failure (data anomalies are expected)
+    logger.info('Validation failures indicate data quality issues, not system errors');
+  }
+}
+
+/**
  * Get scheduler health metrics
  */
 function getHealthMetrics() {
@@ -175,6 +263,16 @@ function getHealthMetrics() {
     consecutiveFailures,
     successRate: totalRuns > 0 ? ((totalSuccesses / totalRuns) * 100).toFixed(1) + '%' : '0%',
     isRunning,
+    validation: {
+      lastRun: lastValidationRun?.toISOString() || null,
+      lastStatus: lastValidationStatus,
+      totalRuns: totalValidationRuns,
+      passes: totalValidationPasses,
+      failures: totalValidationFailures,
+      passRate: totalValidationRuns > 0
+        ? ((totalValidationPasses / totalValidationRuns) * 100).toFixed(1) + '%'
+        : '0%',
+    },
   };
 }
 
@@ -216,7 +314,15 @@ async function main() {
   });
 
   task.start();
-  logger.info('✅ Scheduler started successfully');
+  logger.info('✅ Data pipeline scheduler started successfully');
+
+  // Schedule nightly validation
+  const validationTask = cron.schedule(VALIDATION_SCHEDULE, async () => {
+    await runValidation();
+  });
+
+  validationTask.start();
+  logger.info({ schedule: VALIDATION_SCHEDULE }, '✅ Nightly validation scheduler started');
 
   // Start health monitoring
   startHealthMonitoring();
