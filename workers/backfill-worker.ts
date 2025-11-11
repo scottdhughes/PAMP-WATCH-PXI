@@ -18,6 +18,13 @@ const FRED_METRICS = [
   { id: 'u3', seriesId: 'UNRATE', transform: (v: number) => v / 100 },
   { id: 'usd', seriesId: 'DTWEXBGS', transform: (v: number) => v },
   { id: 'nfci', seriesId: 'NFCI', transform: (v: number) => v },
+  { id: 'stlfsi', seriesId: 'STLFSI2', transform: (v: number) => v },
+  { id: 'breakeven10y', seriesId: 'T10YIE', transform: (v: number) => v / 100 },
+];
+
+// Yield Curve metric requires special handling (computed from two series)
+const YIELD_CURVE_METRICS = [
+  { id: 'yc_10y_2y', dgs10: 'DGS10', dgs2: 'DGS2' },
 ];
 
 interface FredObservation {
@@ -172,6 +179,65 @@ async function calculateRollingStats(
 }
 
 /**
+ * Backfill yield curve spread data
+ */
+async function backfillYieldCurveSpread(
+  id: string,
+  dgs10SeriesId: string,
+  dgs2SeriesId: string,
+  years: number = 10,
+): Promise<void> {
+  logger.info({ id, dgs10SeriesId, dgs2SeriesId }, 'Backfilling yield curve spread');
+
+  // Fetch both series
+  const [dgs10Obs, dgs2Obs] = await Promise.all([
+    fetchFredHistory(dgs10SeriesId, years),
+    fetchFredHistory(dgs2SeriesId, years),
+  ]);
+
+  // Create date-indexed maps for efficient lookup
+  const dgs10Map = new Map(dgs10Obs.map(obs => [obs.date, Number(obs.value)]));
+  const dgs2Map = new Map(dgs2Obs.map(obs => [obs.date, Number(obs.value)]));
+
+  // Calculate spread for dates where both values exist
+  const spreadValues: Array<{ date: string; spread: number }> = [];
+
+  for (const [date, dgs10Value] of dgs10Map) {
+    const dgs2Value = dgs2Map.get(date);
+    if (dgs2Value !== undefined) {
+      // Spread = 10y - 2y (already in percentage points, no conversion needed)
+      const spread = dgs10Value - dgs2Value;
+      spreadValues.push({ date, spread });
+    }
+  }
+
+  logger.info({ id, count: spreadValues.length }, 'Calculated yield curve spreads');
+
+  // Insert spread values into history_values
+  const query = `
+    INSERT INTO history_values (indicator_id, date, raw_value, source)
+    VALUES ($1, $2, $3, 'fred_backfill')
+    ON CONFLICT (indicator_id, date)
+    DO UPDATE SET raw_value = EXCLUDED.raw_value, source = EXCLUDED.source
+  `;
+
+  let inserted = 0;
+  for (const { date, spread } of spreadValues) {
+    try {
+      await pool.query(query, [id, date, spread]);
+      inserted++;
+    } catch (error) {
+      logger.error({ id, date, error }, 'Failed to insert yield curve spread');
+    }
+  }
+
+  logger.info({ id, inserted }, 'Inserted yield curve spread values');
+
+  // Calculate rolling statistics
+  await calculateRollingStats(id);
+}
+
+/**
  * Main backfill logic
  */
 async function backfillHistoricalData(): Promise<void> {
@@ -195,11 +261,22 @@ async function backfillHistoricalData(): Promise<void> {
       await new Promise((resolve) => setTimeout(resolve, 1000));
     }
 
+    // Process yield curve metrics (computed from multiple series)
+    for (const metric of YIELD_CURVE_METRICS) {
+      logger.info({ metricId: metric.id }, 'Processing yield curve metric');
+
+      await backfillYieldCurveSpread(metric.id, metric.dgs10, metric.dgs2, 10);
+
+      // Sleep briefly to avoid rate limiting
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+
     // Refresh materialized view
     await pool.query('REFRESH MATERIALIZED VIEW CONCURRENTLY latest_stats');
 
     const duration = Date.now() - startTime;
-    logger.info({ duration, metricsProcessed: FRED_METRICS.length }, 'Backfill completed successfully');
+    const totalMetrics = FRED_METRICS.length + YIELD_CURVE_METRICS.length;
+    logger.info({ duration, metricsProcessed: totalMetrics }, 'Backfill completed successfully');
   } catch (error) {
     logger.error({ error }, 'Backfill failed');
     throw error;

@@ -12,6 +12,7 @@ import {
   calculateCumulativeReturn,
   calculateSortinoRatio,
 } from './utils/analytics.js';
+import { runBacktest, type BacktestConfig } from './lib/backtest-engine.js';
 
 /**
  * Simple in-memory cache
@@ -586,6 +587,156 @@ server.get('/metrics', async () => {
     cacheSize: cache.size,
     timestamp: new Date().toISOString(),
   };
+});
+/**
+ * V1 API: Get latest regime detection
+ */
+server.get('/v1/pxi/regime/latest', async (request, reply) => {
+  try {
+    // Check cache first
+    if (config.cacheEnabled) {
+      const cached = getFromCache<any>('pxi:regime:latest');
+      if (cached) {
+        reply.header('X-Cache', 'HIT');
+        return cached;
+      }
+    }
+
+    const query = `
+      SELECT
+        date,
+        regime,
+        cluster_id,
+        features,
+        centroid,
+        probabilities,
+        created_at
+      FROM pxi_regimes
+      ORDER BY date DESC
+      LIMIT 1
+    `;
+
+    const result = await pool.query(query);
+
+    if (result.rows.length === 0) {
+      return reply.code(404).send({ message: 'No regime data available' });
+    }
+
+    const row = result.rows[0];
+    const regimeData = {
+      date: row.date,
+      regime: row.regime,
+      clusterId: row.cluster_id,
+      features: row.features,
+      centroid: row.centroid,
+      probabilities: row.probabilities,
+      createdAt: row.created_at,
+    };
+
+    // Cache the response
+    if (config.cacheEnabled) {
+      setInCache('pxi:regime:latest', regimeData, config.cacheTtlSeconds);
+      reply.header('X-Cache', 'MISS');
+    }
+
+    return regimeData;
+  } catch (error) {
+    logger.error({ error, reqId: request.id }, 'Failed to fetch latest regime');
+    return reply.code(500).send({
+      error: 'Internal server error',
+      message: 'Failed to fetch regime data',
+    });
+  }
+});
+
+/**
+ * V1 API: Get regime detection history
+ */
+server.get('/v1/pxi/regime/history', async (request, reply) => {
+  try {
+    // Parse query parameters
+    const { days = '30' } = request.query as { days?: string };
+    const daysInt = Math.min(Math.max(parseInt(days, 10) || 30, 1), 365);
+
+    // Check cache first
+    const cacheKey = `pxi:regime:history:${daysInt}`;
+    if (config.cacheEnabled) {
+      const cached = getFromCache<any[]>(cacheKey);
+      if (cached) {
+        reply.header('X-Cache', 'HIT');
+        return { regimes: cached, days: daysInt };
+      }
+    }
+
+    const query = `
+      SELECT
+        date,
+        regime,
+        cluster_id,
+        features,
+        centroid,
+        probabilities,
+        created_at
+      FROM pxi_regimes
+      WHERE date >= CURRENT_DATE - INTERVAL '${daysInt} days'
+      ORDER BY date DESC
+    `;
+
+    const result = await pool.query(query);
+
+    const regimes = result.rows.map((row) => ({
+      date: row.date,
+      regime: row.regime,
+      clusterId: row.cluster_id,
+      features: row.features,
+      centroid: row.centroid,
+      probabilities: row.probabilities,
+      createdAt: row.created_at,
+    }));
+
+    // Cache the response
+    if (config.cacheEnabled) {
+      setInCache(cacheKey, regimes, config.cacheTtlSeconds);
+      reply.header('X-Cache', 'MISS');
+    }
+
+    return { regimes, days: daysInt };
+  } catch (error) {
+    logger.error({ error, reqId: request.id }, 'Failed to fetch regime history');
+    return reply.code(500).send({
+      error: 'Internal server error',
+      message: 'Failed to fetch regime history',
+    });
+  }
+});
+
+/**
+ * POST /v1/pxi/backtest
+ * Run backtest with regime filtering
+ */
+server.post('/v1/pxi/backtest', async (request, reply) => {
+  try {
+    const backtestConfig = request.body as BacktestConfig;
+
+    // Validate config
+    if (!backtestConfig.startDate || !backtestConfig.endDate || !backtestConfig.rules) {
+      return reply.code(400).send({
+        error: 'Bad request',
+        message: 'Missing required fields: startDate, endDate, rules',
+      });
+    }
+
+    // Run backtest
+    const result = await runBacktest(backtestConfig);
+
+    return { success: true, result };
+  } catch (error) {
+    logger.error({ error, reqId: request.id }, 'Failed to run backtest');
+    return reply.code(500).send({
+      error: 'Internal server error',
+      message: error instanceof Error ? error.message : 'Failed to run backtest',
+    });
+  }
 });
 
 /**

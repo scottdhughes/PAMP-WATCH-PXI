@@ -121,6 +121,37 @@ export const metricFetchers: MetricFetcher[] = [
     },
   },
   {
+    id: 'yc_10y_2y',
+    label: 'Yield Curve Slope (10y-2y)',
+    fetch: async () => {
+      // Fetch both 10-year and 2-year Treasury yields
+      const [dgs10Data, dgs2Data] = await Promise.all([
+        fetchLatestFredObservation('DGS10'),
+        fetchLatestFredObservation('DGS2'),
+      ]);
+
+      // Calculate spread: 10y - 2y (in percentage points)
+      const spread = dgs10Data.value - dgs2Data.value;
+
+      // Use the most recent timestamp
+      const timestamp = dgs10Data.timestamp > dgs2Data.timestamp ? dgs10Data.timestamp : dgs2Data.timestamp;
+
+      return {
+        id: 'yc_10y_2y',
+        label: 'Yield Curve Slope (10y-2y)',
+        value: spread,
+        unit: 'percentage_points',
+        sourceTimestamp: timestamp,
+        ingestedAt: new Date().toISOString(),
+        metadata: {
+          dgs10: dgs10Data.value,
+          dgs2: dgs2Data.value,
+          isInverted: spread < 0,
+        },
+      };
+    },
+  },
+  {
     id: 'btcReturn',
     label: 'BTC Daily Return',
     fetch: async () => {
@@ -216,6 +247,36 @@ export const metricFetchers: MetricFetcher[] = [
           signalMultiplier,
           indicatorSource, // Track where indicators came from
         },
+      };
+    },
+  },
+  {
+    id: 'stlfsi',
+    label: 'St. Louis Fed Financial Stress Index',
+    fetch: async () => {
+      const { value, timestamp } = await fetchLatestFredObservation('STLFSI2');
+      return {
+        id: 'stlfsi',
+        label: 'St. Louis Fed Financial Stress Index',
+        value,
+        unit: 'index',
+        sourceTimestamp: timestamp,
+        ingestedAt: new Date().toISOString(),
+      };
+    },
+  },
+  {
+    id: 'breakeven10y',
+    label: '10-Year Breakeven Inflation',
+    fetch: async () => {
+      const { value, timestamp } = await fetchLatestFredObservation('T10YIE');
+      return {
+        id: 'breakeven10y',
+        label: '10-Year Breakeven Inflation',
+        value: value / 100, // Convert percentage points to decimal
+        unit: 'percent',
+        sourceTimestamp: timestamp,
+        ingestedAt: new Date().toISOString(),
       };
     },
   },

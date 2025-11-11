@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { useQuery } from 'react-query';
 import { fetcher } from '@/utils/fetcher';
 import { motion, AnimatePresence } from 'framer-motion';
-import { LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip } from 'recharts';
+import { LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip, ReferenceArea } from 'recharts';
 import clsx from 'clsx';
 import { useDashboardSnapshot } from '@/hooks/useDashboardSnapshot';
 import { StaleIndicator } from '@/components/StaleIndicator';
@@ -14,9 +14,13 @@ const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8787';
 // Regime color mapping
 const getRegimeColor = (regime: string) => {
   const colors: Record<string, string> = {
+    // K-means regime types
+    'Calm': 'text-green-400',
+    'Normal': 'text-blue-400',
+    'Stress': 'text-red-400',
+    // Legacy rule-based regime types
     'Stable': 'text-green-400',
     'Caution': 'text-amber-400',
-    'Stress': 'text-orange-400',
     'Crisis': 'text-red-500',
     'Strong PAMP': 'text-green-400',
   };
@@ -24,14 +28,8 @@ const getRegimeColor = (regime: string) => {
 };
 
 const getRegimeIcon = (regime: string) => {
-  const icons: Record<string, string> = {
-    'Stable': '⚫',
-    'Caution': '⚠',
-    'Stress': '🔥',
-    'Crisis': '🚨',
-    'Strong PAMP': '🟢',
-  };
-  return icons[regime] || '⚫';
+  // No icons for cleaner look
+  return '';
 };
 
 // Format metric values based on their type
@@ -63,6 +61,17 @@ const formatMetricValue = (metric: any) => {
     return value.toFixed(3);
   }
 
+  // Yield Curve Slope (percentage points with sign)
+  if (metric.id === 'yc_10y_2y') {
+    const formatted = value.toFixed(2);
+    return value >= 0 ? `+${formatted}` : formatted;
+  }
+
+  // Breakeven Inflation (percentage with 2 decimals)
+  if (metric.id === 'breakeven10y') {
+    return `${(value * 100).toFixed(2)}%`;
+  }
+
   // Default
   return value.toFixed(3);
 };
@@ -85,6 +94,13 @@ export default function Dashboard() {
     { refetchInterval: 30000 }
   );
 
+  // Fetch k-means regime detection
+  const { data: kmeansRegimeData } = useQuery(
+    'kmeans-regime',
+    () => fetcher<any>(`${API_BASE}/v1/pxi/regime/latest`),
+    { refetchInterval: 30000 }
+  );
+
   // Fetch historical PXI data for chart (still separate - not in snapshot)
   const { data: historyData } = useQuery(
     'pxi-history',
@@ -92,8 +108,18 @@ export default function Dashboard() {
     { refetchInterval: 60000 }
   );
 
+  // Fetch regime history for chart overlays
+  const { data: regimeHistoryData } = useQuery(
+    'regime-history',
+    () => fetcher<any>(`${API_BASE}/v1/pxi/regime/history?days=30`),
+    { refetchInterval: 60000 }
+  );
+
   // Expanded state for System Internals
   const [expanded, setExpanded] = useState(false);
+
+  // Toggle state for regime bands
+  const [showRegimeBands, setShowRegimeBands] = useState(true);
 
   // Format history data for chart (MUST be before early return to satisfy Rules of Hooks)
   // Aggregate by day to show cleaner chart (1 point per day)
@@ -143,6 +169,106 @@ export default function Dashboard() {
     return ticks.filter((_, i) => i % step === 0 || i === ticks.length - 1);
   }, [chartData]);
 
+  // Process regime bands for chart overlay
+  const regimeBands = React.useMemo(() => {
+    if (!regimeHistoryData?.regimes || !chartData.length) return [];
+
+    const regimes = regimeHistoryData.regimes;
+    const bands: Array<{ x1: number; x2: number; regime: string; fill: string }> = [];
+
+    // Sort regimes by date
+    const sortedRegimes = [...regimes].sort((a, b) =>
+      new Date(a.date).getTime() - new Date(b.date).getTime()
+    );
+
+    // Create bands by grouping consecutive days with same regime
+    for (let i = 0; i < sortedRegimes.length; i++) {
+      const currentRegime = sortedRegimes[i];
+      const currentDate = new Date(currentRegime.date);
+      const currentTimestamp = new Date(currentDate.toISOString().split('T')[0] + 'T12:00:00Z').getTime();
+
+      // Find next regime or use end of chart
+      let nextTimestamp: number;
+      if (i < sortedRegimes.length - 1) {
+        const nextDate = new Date(sortedRegimes[i + 1].date);
+        nextTimestamp = new Date(nextDate.toISOString().split('T')[0] + 'T12:00:00Z').getTime();
+      } else {
+        // Use last chart data point + 1 day
+        nextTimestamp = chartData[chartData.length - 1].timestamp + 24 * 60 * 60 * 1000;
+      }
+
+      // Determine fill color based on regime
+      let fill = 'rgba(100, 116, 139, 0.1)'; // default gray
+      if (currentRegime.regime === 'Calm') {
+        fill = 'rgba(34, 197, 94, 0.1)'; // green
+      } else if (currentRegime.regime === 'Normal') {
+        fill = 'rgba(59, 130, 246, 0.1)'; // blue
+      } else if (currentRegime.regime === 'Stress') {
+        fill = 'rgba(239, 68, 68, 0.1)'; // red
+      }
+
+      bands.push({
+        x1: currentTimestamp,
+        x2: nextTimestamp,
+        regime: currentRegime.regime,
+        fill,
+      });
+    }
+
+    return bands;
+  }, [regimeHistoryData, chartData]);
+
+  // Calculate PXI deltas (7D and 30D) - MUST be before early return to satisfy Rules of Hooks
+  const pxiDeltas = React.useMemo(() => {
+    const currentPxiValue = snapshot.data?.pxi;
+    const rawData = historyData?.history || [];
+
+    if (!rawData.length || !currentPxiValue) {
+      return { delta7D: null, delta30D: null };
+    }
+
+    // Get current date and find values from 7 and 30 days ago
+    const now = new Date();
+    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+    // Find closest PXI values
+    let pxi7D = null;
+    let pxi30D = null;
+
+    // Sort by timestamp descending (newest first)
+    const sortedData = [...rawData].sort((a, b) =>
+      new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    );
+
+    // Find 7-day value (look for value around 7 days ago, ±1 day tolerance)
+    const target7D = sevenDaysAgo.getTime();
+    for (const item of sortedData) {
+      const itemTime = new Date(item.timestamp).getTime();
+      const diff = Math.abs(itemTime - target7D);
+      if (diff < 2 * 24 * 60 * 60 * 1000) { // Within 2 days
+        pxi7D = item.pxiValue;
+        break;
+      }
+    }
+
+    // Find 30-day value (look for value around 30 days ago, ±2 day tolerance)
+    const target30D = thirtyDaysAgo.getTime();
+    for (const item of sortedData) {
+      const itemTime = new Date(item.timestamp).getTime();
+      const diff = Math.abs(itemTime - target30D);
+      if (diff < 3 * 24 * 60 * 60 * 1000) { // Within 3 days
+        pxi30D = item.pxiValue;
+        break;
+      }
+    }
+
+    return {
+      delta7D: pxi7D !== null ? currentPxiValue - pxi7D : null,
+      delta30D: pxi30D !== null ? currentPxiValue - pxi30D : null,
+    };
+  }, [historyData, snapshot.data?.pxi]);
+
   const isLoading = snapshot.isLoading || isLoadingCache || isLoadingRisk;
 
   if (isLoading) {
@@ -159,7 +285,13 @@ export default function Dashboard() {
   // Extract data from snapshot
   const snapshotData = snapshot.data;
   const pxiValue = snapshotData?.pxi || 0;
-  const regime = snapshotData?.regime?.regime || 'Unknown';
+
+  // Use k-means regime if available, otherwise fall back to rule-based regime
+  const kmeansRegime = kmeansRegimeData?.regime;
+  const ruleBasedRegime = snapshotData?.regime?.regime;
+  const regime = kmeansRegime || ruleBasedRegime || 'Unknown';
+  const regimeSource = kmeansRegime ? 'K-Means Clustering' : 'Rule-Based';
+
   const statusLabel = snapshotData?.statusLabel || 'Unknown';
   const calculatedAt = snapshotData?.calculatedAt ? new Date(snapshotData.calculatedAt) : new Date();
   const metricCount = snapshotData?.metrics?.length || 0;
@@ -189,11 +321,11 @@ export default function Dashboard() {
       <header className="text-center mb-8 md:mb-12">
         <div className="border-b border-slate-800 pb-2 mb-4">
           <h1 className="text-2xl md:text-3xl font-light tracking-tight text-slate-200">
-            PXI Command Dashboard
+            PXI Command
           </h1>
         </div>
         <p className="text-slate-500 text-xs md:text-sm tracking-wide">
-          Real-time composite systemic stress index
+          Composite Systemic Stress Index
         </p>
         {/* Stale indicator */}
         <div className="mt-3 flex items-center justify-center">
@@ -208,10 +340,15 @@ export default function Dashboard() {
       </header>
 
       {/* Regime Indicator */}
-      <div className="mb-6 md:mb-8 flex items-center gap-3 text-sm">
-        <span className="text-slate-500">Market Regime:</span>
-        <span className={`text-base md:text-lg ${regimeColor} font-medium`}>
-          {regimeIcon} {regime}
+      <div className="mb-6 md:mb-8 flex flex-col items-center gap-2 text-sm">
+        <div className="flex items-center gap-3">
+          <span className="text-slate-500">Market Regime:</span>
+          <span className={`text-base md:text-lg ${regimeColor} font-medium`}>
+            {regime}
+          </span>
+        </div>
+        <span className="text-[10px] text-slate-600 tracking-wide">
+          {regimeSource}
         </span>
       </div>
 
@@ -226,6 +363,27 @@ export default function Dashboard() {
         >
           {pxiValue >= 0 ? '+' : ''}{pxiValue.toFixed(2)}
         </motion.h2>
+        <p className="text-slate-400 text-sm">
+          Composite Systemic Stress Index
+        </p>
+        {/* Delta display */}
+        {(pxiDeltas.delta7D !== null || pxiDeltas.delta30D !== null) && (
+          <p className="text-slate-500 text-xs font-mono">
+            {pxiDeltas.delta7D !== null && (
+              <span className={pxiDeltas.delta7D >= 0 ? 'text-red-400' : 'text-green-400'}>
+                Δ7D {pxiDeltas.delta7D > 0 ? `+${pxiDeltas.delta7D.toFixed(2)}` : pxiDeltas.delta7D.toFixed(2)}
+              </span>
+            )}
+            {pxiDeltas.delta7D !== null && pxiDeltas.delta30D !== null && (
+              <span className="text-slate-700 mx-2">|</span>
+            )}
+            {pxiDeltas.delta30D !== null && (
+              <span className={pxiDeltas.delta30D >= 0 ? 'text-red-400' : 'text-green-400'}>
+                Δ30D {pxiDeltas.delta30D > 0 ? `+${pxiDeltas.delta30D.toFixed(2)}` : pxiDeltas.delta30D.toFixed(2)}
+              </span>
+            )}
+          </p>
+        )}
         <p className="text-slate-300 text-base md:text-lg font-light tracking-wide text-center px-4">
           {statusLabel}
         </p>
@@ -249,7 +407,7 @@ export default function Dashboard() {
           <h3 className="text-slate-400 text-sm mb-4 tracking-wide uppercase">
             Underlying PXI Metrics
           </h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-y-6 gap-x-4 text-sm text-slate-300">
+          <div className="grid grid-cols-2 md:grid-cols-5 lg:grid-cols-10 gap-y-6 gap-x-4 text-sm text-slate-300">
             {metrics.map((m: any) => (
               <div key={m.id} className="flex flex-col items-center">
                 <p className="text-slate-500 text-xs mb-1 text-center">{m.label}</p>
@@ -262,6 +420,12 @@ export default function Dashboard() {
                   {formatMetricValue(m)}
                 </p>
                 <p className="text-xs text-slate-600">z: {m.zScore?.toFixed(2)}</p>
+                {/* Show "Inverted" badge for negative yield curve */}
+                {m.id === 'yc_10y_2y' && m.value < 0 && (
+                  <span className="mt-1 px-2 py-0.5 text-[10px] bg-red-500/20 text-red-400 rounded border border-red-500/30 font-semibold">
+                    INVERTED
+                  </span>
+                )}
               </div>
             ))}
           </div>
@@ -399,12 +563,35 @@ export default function Dashboard() {
       {/* Historical Trend Chart */}
       {chartData.length > 0 && (
         <section className="w-full max-w-5xl mb-8 md:mb-12 px-4">
-          <h3 className="text-slate-500 text-xs md:text-sm text-center mb-4 tracking-wide">
-            Historical PXI Movement (30 days)
-          </h3>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-slate-500 text-xs md:text-sm text-center flex-1 tracking-wide">
+              Historical PXI Movement (30 days)
+            </h3>
+            <button
+              onClick={() => setShowRegimeBands(!showRegimeBands)}
+              className={clsx(
+                'text-[10px] px-3 py-1 rounded-full border transition-colors',
+                showRegimeBands
+                  ? 'bg-blue-500/10 border-blue-500/50 text-blue-400'
+                  : 'bg-slate-900 border-slate-800 text-slate-500'
+              )}
+            >
+              Regime Bands
+            </button>
+          </div>
           <div className="bg-slate-950 rounded-lg p-2 md:p-4 border border-slate-900">
             <ResponsiveContainer width="100%" height={240}>
               <LineChart data={chartData}>
+                {/* Regime background bands */}
+                {showRegimeBands && regimeBands.map((band, idx) => (
+                  <ReferenceArea
+                    key={idx}
+                    x1={band.x1}
+                    x2={band.x2}
+                    fill={band.fill}
+                    strokeOpacity={0}
+                  />
+                ))}
                 <XAxis
                   dataKey="timestamp"
                   stroke="#334155"
@@ -438,6 +625,23 @@ export default function Dashboard() {
                 />
               </LineChart>
             </ResponsiveContainer>
+            {/* Regime legend */}
+            {showRegimeBands && (
+              <div className="flex items-center justify-center gap-4 mt-3 text-[10px]">
+                <div className="flex items-center gap-1.5">
+                  <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: 'rgba(34, 197, 94, 0.3)' }}></div>
+                  <span className="text-slate-500">Calm</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: 'rgba(59, 130, 246, 0.3)' }}></div>
+                  <span className="text-slate-500">Normal</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: 'rgba(239, 68, 68, 0.3)' }}></div>
+                  <span className="text-slate-500">Stress</span>
+                </div>
+              </div>
+            )}
           </div>
         </section>
       )}

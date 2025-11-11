@@ -5,7 +5,7 @@
 /**
  * Metric ID type - ensures type safety for metric identifiers
  */
-export type MetricId = 'hyOas' | 'igOas' | 'vix' | 'u3' | 'usd' | 'nfci' | 'btcReturn';
+export type MetricId = 'hyOas' | 'igOas' | 'vix' | 'u3' | 'usd' | 'nfci' | 'btcReturn' | 'yc_10y_2y' | 'stlfsi' | 'breakeven10y';
 
 /**
  * Breach status type

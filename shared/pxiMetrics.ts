@@ -87,6 +87,39 @@ export const pxiMetricDefinitions: PXIMetricDefinition[] = [
     seriesId: 'bitcoin',
     source: 'CoinGecko',
   },
+  {
+    id: 'yc_10y_2y',
+    label: 'Yield Curve Slope (10y-2y)',
+    lowerBound: -1.0,  // Deeply inverted (high stress)
+    upperBound: 3.0,   // Very steep (low stress)
+    weight: 1.2,       // Significant weight (reliable recession indicator)
+    polarity: 'positive',
+    riskDirection: 'higher_is_less_risk',  // Positive slope = less risk
+    seriesId: 'DGS10,DGS2',
+    source: 'FRED',
+  },
+  {
+    id: 'stlfsi',
+    label: 'St. Louis Fed Financial Stress Index',
+    lowerBound: -1.0,  // Low financial stress
+    upperBound: 1.5,   // High financial stress
+    weight: 1.4,       // High weight (comprehensive Fed stress measure)
+    polarity: 'negative',
+    riskDirection: 'higher_is_more_risk',  // Higher stress = more risk
+    seriesId: 'STLFSI2',
+    source: 'FRED',
+  },
+  {
+    id: 'breakeven10y',
+    label: '10-Year Breakeven Inflation',
+    lowerBound: 0.01,   // Low inflation expectations (1%)
+    upperBound: 0.03,   // High inflation expectations (3%)
+    weight: 0,          // Initially excluded from PXI weighting (display-only)
+    polarity: 'negative',
+    riskDirection: 'higher_is_more_risk',  // Higher inflation expectations = more risk
+    seriesId: 'T10YIE',
+    source: 'FRED',
+  },
 ];
 
 /**

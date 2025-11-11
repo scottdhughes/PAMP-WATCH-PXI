@@ -10,10 +10,16 @@
  * - Correlation analysis and structural shift detection
  * - Data quality monitoring with health status tracking
  *
+ * Also runs daily regime detection at 02:30 UTC:
+ * - K-means clustering (k=3, seeded) for regime classification
+ * - Feature extraction from z-scores and rolling volatilities
+ * - Automatic labeling as Calm/Normal/Stress
+ *
  * Features:
  * - Robust error handling with retry logic
  * - Sequential execution (ingest → compute)
  * - Nightly validation for data quality assurance
+ * - Daily regime detection with clustering
  * - Health monitoring and metrics tracking
  * - Graceful shutdown
  * - Prevents overlapping runs
@@ -23,6 +29,7 @@ import cron from 'node-cron';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { logger } from './logger.js';
+import { pool } from './db.js';
 
 const execAsync = promisify(exec);
 
@@ -47,6 +54,20 @@ let lastValidationStatus: 'pass' | 'fail' | null = null;
 let totalValidationRuns = 0;
 let totalValidationPasses = 0;
 let totalValidationFailures = 0;
+
+// Metrics tracking - Regime Detection
+let lastRegimeRun: Date | null = null;
+let lastRegimeStatus: 'success' | 'fail' | null = null;
+let totalRegimeRuns = 0;
+let totalRegimeSuccesses = 0;
+let totalRegimeFailures = 0;
+
+// Alert configuration
+const ALERT_ENABLED = process.env.ALERT_ENABLED === 'true';
+const ALERT_WEBHOOK_URL = process.env.ALERT_WEBHOOK_URL || '';
+
+// Regime transition tracking
+let previousRegime: string | null = null;
 
 /**
  * Execute a command with timeout and retry logic
@@ -244,6 +265,153 @@ async function runValidation(): Promise<void> {
 }
 
 /**
+ * Send webhook alert for regime transition
+ */
+async function sendRegimeAlert(
+  previousRegime: string,
+  currentRegime: string,
+  pxiValue: number,
+  metrics: { vix?: number; hyOas?: number }
+): Promise<void> {
+  if (!ALERT_ENABLED || !ALERT_WEBHOOK_URL) {
+    logger.debug('Alerts disabled or webhook URL not configured');
+    return;
+  }
+
+  const regimeEmojis: Record<string, string> = {
+    'Calm': '🌊',
+    'Normal': '⚖️',
+    'Stress': '🔥',
+  };
+
+  const date = new Date().toISOString().split('T')[0];
+  const message = `🚨 PXI Regime Change: ${previousRegime} ${regimeEmojis[previousRegime] || ''} → ${currentRegime} ${regimeEmojis[currentRegime] || ''}
+Date: ${date}
+PXI: ${pxiValue.toFixed(3)} | VIX: ${metrics.vix?.toFixed(1) || 'N/A'} | HY OAS: ${metrics.hyOas ? (metrics.hyOas * 100).toFixed(2) + '%' : 'N/A'}`;
+
+  try {
+    const response = await fetch(ALERT_WEBHOOK_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: message }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Webhook request failed: ${response.status} ${response.statusText}`);
+    }
+
+    logger.info({ previousRegime, currentRegime, date }, '📨 Regime transition alert sent');
+  } catch (error) {
+    logger.error({ error: (error as Error).message }, '❌ Failed to send regime transition alert');
+  }
+}
+
+/**
+ * Check for regime changes and send alerts
+ */
+async function checkRegimeChange(): Promise<void> {
+  try {
+    // Fetch latest regime from database
+    const regimeResult = await pool.query(
+      `SELECT regime, probabilities
+       FROM pxi_regimes
+       ORDER BY date DESC
+       LIMIT 1`
+    );
+
+    if (regimeResult.rows.length === 0) {
+      logger.warn('No regime data available for change detection');
+      return;
+    }
+
+    const currentRegime = regimeResult.rows[0].regime;
+    const probabilities = regimeResult.rows[0].probabilities;
+    const pxiValue = probabilities?.pxiValue || 0;
+    const rawMetrics = probabilities?.rawMetrics || {};
+
+    // Check if regime has changed
+    if (previousRegime && previousRegime !== currentRegime) {
+      logger.info(
+        { previousRegime, currentRegime },
+        '🔄 Regime transition detected'
+      );
+
+      await sendRegimeAlert(
+        previousRegime,
+        currentRegime,
+        pxiValue,
+        {
+          vix: rawMetrics.vix?.value,
+          hyOas: rawMetrics.hyOas?.value,
+        }
+      );
+    }
+
+    // Update previous regime
+    previousRegime = currentRegime;
+  } catch (error) {
+    logger.error({ error: (error as Error).message }, 'Failed to check regime change');
+  }
+}
+
+/**
+ * Run regime detection (k-means clustering)
+ */
+async function runRegimeDetection(): Promise<void> {
+  totalRegimeRuns++;
+  const startTime = Date.now();
+
+  try {
+    logger.info('🎯 Starting regime detection (k-means clustering)');
+
+    const result = await executeWithRetry('npm run worker:compute:regime');
+
+    const duration = Date.now() - startTime;
+    lastRegimeRun = new Date();
+    lastRegimeStatus = 'success';
+    totalRegimeSuccesses++;
+
+    // Extract key metrics from output
+    const daysMatch = result.stdout.match(/days: (\d+)/);
+    const regimesMatch = result.stdout.match(/distribution: \{([^}]+)\}/);
+
+    const days = daysMatch ? daysMatch[1] : 'unknown';
+    const distribution = regimesMatch ? regimesMatch[1] : 'unknown';
+
+    logger.info(
+      {
+        days,
+        distribution,
+        duration,
+        regimeSuccessRate: totalRegimeRuns > 0
+          ? ((totalRegimeSuccesses / totalRegimeRuns) * 100).toFixed(1) + '%'
+          : '0%',
+      },
+      '✅ Regime detection completed successfully'
+    );
+
+    // Check for regime changes and send alerts
+    await checkRegimeChange();
+  } catch (error) {
+    lastRegimeRun = new Date();
+    lastRegimeStatus = 'fail';
+    totalRegimeFailures++;
+    const duration = Date.now() - startTime;
+
+    logger.error(
+      {
+        error: (error as Error).message,
+        duration,
+        regimeFailRate: totalRegimeRuns > 0
+          ? ((totalRegimeFailures / totalRegimeRuns) * 100).toFixed(1) + '%'
+          : '0%',
+      },
+      '❌ Regime detection failed'
+    );
+  }
+}
+
+/**
  * Get scheduler health metrics
  */
 function getHealthMetrics() {
@@ -271,6 +439,16 @@ function getHealthMetrics() {
       failures: totalValidationFailures,
       passRate: totalValidationRuns > 0
         ? ((totalValidationPasses / totalValidationRuns) * 100).toFixed(1) + '%'
+        : '0%',
+    },
+    regime: {
+      lastRun: lastRegimeRun?.toISOString() || null,
+      lastStatus: lastRegimeStatus,
+      totalRuns: totalRegimeRuns,
+      successes: totalRegimeSuccesses,
+      failures: totalRegimeFailures,
+      successRate: totalRegimeRuns > 0
+        ? ((totalRegimeSuccesses / totalRegimeRuns) * 100).toFixed(1) + '%'
         : '0%',
     },
   };
@@ -301,6 +479,19 @@ async function main() {
   logger.info('🎯 PXI Real-Time Scheduler starting...');
   logger.info({ schedule: CRON_SCHEDULE }, 'Cron schedule configured');
 
+  // Initialize previous regime for change detection
+  try {
+    const regimeResult = await pool.query(
+      'SELECT regime FROM pxi_regimes ORDER BY date DESC LIMIT 1'
+    );
+    if (regimeResult.rows.length > 0) {
+      previousRegime = regimeResult.rows[0].regime;
+      logger.info({ previousRegime }, 'Initialized regime tracking');
+    }
+  } catch (error) {
+    logger.warn({ error: (error as Error).message }, 'Failed to initialize regime tracking');
+  }
+
   // Initial health check
   logger.info(getHealthMetrics(), 'Initial health metrics');
 
@@ -323,6 +514,14 @@ async function main() {
 
   validationTask.start();
   logger.info({ schedule: VALIDATION_SCHEDULE }, '✅ Nightly validation scheduler started');
+
+  // Schedule daily regime detection (02:30 UTC)
+  const regimeTask = cron.schedule('30 2 * * *', async () => {
+    await runRegimeDetection();
+  });
+
+  regimeTask.start();
+  logger.info({ schedule: '30 2 * * *' }, '✅ Daily regime detection scheduler started');
 
   // Start health monitoring
   startHealthMonitoring();
