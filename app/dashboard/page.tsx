@@ -291,7 +291,8 @@ export default function Dashboard() {
                 <tr>
                   <th className="px-3 py-2 font-medium">Metric</th>
                   <th className="px-3 py-2 font-medium">Value</th>
-                  <th className="px-3 py-2 font-medium">Δ 1M</th>
+                  <th className="px-3 py-2 font-medium">Δ 7D</th>
+                  <th className="px-3 py-2 font-medium">Δ 30D</th>
                   <th className="px-3 py-2 font-medium">Lower</th>
                   <th className="px-3 py-2 font-medium">Upper</th>
                   <th className="px-3 py-2 font-medium">z-Score</th>
@@ -304,7 +305,20 @@ export default function Dashboard() {
                   <tr key={m.id} className="border-b border-slate-800/50 hover:bg-slate-800/20 transition-colors">
                     <td className="px-3 py-3 font-medium">{m.label}</td>
                     <td className="px-3 py-3 font-mono">{formatMetricValue(m)}</td>
-                    <td className="px-3 py-3 font-mono">{m.delta?.toFixed(4)}</td>
+                    <td className={clsx("px-3 py-3 font-mono text-sm", {
+                      "text-green-400": m.delta7D !== null && m.delta7D > 0,
+                      "text-red-400": m.delta7D !== null && m.delta7D < 0,
+                      "text-slate-500": m.delta7D === null
+                    })}>
+                      {m.delta7D !== null && m.delta7D !== undefined ? `${m.delta7D > 0 ? '+' : ''}${m.delta7D.toFixed(2)}%` : 'N/A'}
+                    </td>
+                    <td className={clsx("px-3 py-3 font-mono text-sm", {
+                      "text-green-400": m.delta30D !== null && m.delta30D > 0,
+                      "text-red-400": m.delta30D !== null && m.delta30D < 0,
+                      "text-slate-500": m.delta30D === null
+                    })}>
+                      {m.delta30D !== null && m.delta30D !== undefined ? `${m.delta30D > 0 ? '+' : ''}${m.delta30D.toFixed(2)}%` : 'N/A'}
+                    </td>
                     <td className="px-3 py-3 font-mono text-slate-500">{m.lower?.toFixed(3)}</td>
                     <td className="px-3 py-3 font-mono text-slate-500">{m.upper?.toFixed(3)}</td>
                     <td className={clsx("px-3 py-3 font-semibold font-mono", {

@@ -741,6 +741,50 @@ export const fetchLatestIndicators = async (): Promise<{
 };
 
 /**
+ * Fetches historical metric values for delta calculations
+ * Returns the metric values from N days ago
+ *
+ * @param metricId - The metric ID to fetch
+ * @param daysAgo - Number of days to look back
+ * @returns The metric value from daysAgo, or null if not found
+ */
+export const fetchHistoricalMetricValue = async (
+  metricId: string,
+  daysAgo: number
+): Promise<number | null> => {
+  let client: PoolClient | null = null;
+  try {
+    client = await pool.connect();
+
+    // Query for the closest sample to the target date (within ±2 days for tolerance)
+    const result = await client.query(
+      `SELECT value
+       FROM pxi_metric_samples
+       WHERE metric_id = $1
+         AND source_timestamp >= NOW() - INTERVAL '${daysAgo + 2} days'
+         AND source_timestamp <= NOW() - INTERVAL '${daysAgo - 2} days'
+       ORDER BY ABS(EXTRACT(EPOCH FROM (source_timestamp - (NOW() - INTERVAL '${daysAgo} days'))))
+       LIMIT 1`,
+      [metricId]
+    );
+
+    if (result.rows.length === 0) {
+      logger.debug({ metricId, daysAgo }, 'No historical value found for metric');
+      return null;
+    }
+
+    return result.rows[0].value;
+  } catch (error) {
+    logger.error({ error, metricId, daysAgo }, 'Failed to fetch historical metric value');
+    return null; // Return null on error to avoid breaking the response
+  } finally {
+    if (client) {
+      client.release();
+    }
+  }
+};
+
+/**
  * Gracefully closes the database pool
  */
 export const closePool = async (): Promise<void> => {

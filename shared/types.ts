@@ -52,7 +52,9 @@ export interface MetricRow {
   id: MetricId;
   label: string;
   value: number;
-  delta: number;
+  delta: number;  // Deprecated: use delta7D or delta30D
+  delta7D?: number;  // 7-day percentage change
+  delta30D?: number; // 30-day percentage change
   lower: number;
   upper: number;
   zScore: number;
