@@ -69,12 +69,15 @@ function getWeightMultiplier(zScore: number): number {
 
 /**
  * Classify regime based on composite PXI value
+ * Positive PXI = PAMP (low stress)
+ * Negative PXI = Stress/Crisis
  */
 function classifyRegime(pxiValue: number): string {
-  const absValue = Math.abs(pxiValue);
-  if (absValue > 2.0) return 'Crisis';
-  if (absValue > 1.0) return 'Elevated Stress';
-  return 'Normal';
+  if (pxiValue > 2.0) return 'Strong PAMP';
+  if (pxiValue > 1.0) return 'Moderate PAMP';
+  if (pxiValue >= -1.0) return 'Normal';
+  if (pxiValue >= -2.0) return 'Elevated Stress';
+  return 'Crisis';
 }
 
 /**
@@ -188,9 +191,9 @@ async function computePXI(): Promise<void> {
       const actualWeight = def.weight * weightMultiplier;
 
       // Apply directional multiplier based on risk_direction
-      // higher_is_more_risk: direction = 1 (positive z-score = more risk)
-      // higher_is_less_risk: direction = -1 (positive z-score = less risk, inverted contribution)
-      const direction = def.riskDirection === 'higher_is_more_risk' ? 1 : -1;
+      // higher_is_more_risk: direction = -1 (negative z-score [below normal] = positive contribution [less stress])
+      // higher_is_less_risk: direction = 1 (positive z-score [strong] = positive contribution [less stress])
+      const direction = def.riskDirection === 'higher_is_more_risk' ? -1 : 1;
       const contribution = actualWeight * zScore * direction;
 
       totalWeight += actualWeight;
