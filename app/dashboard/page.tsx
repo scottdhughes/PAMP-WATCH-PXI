@@ -79,11 +79,30 @@ export default function Dashboard() {
   const [expanded, setExpanded] = useState(false);
 
   // Format history data for chart (MUST be before early return to satisfy Rules of Hooks)
+  // Aggregate by day to show cleaner chart (1 point per day)
   const chartData = React.useMemo(() => {
-    return historyData?.history?.map((item: any) => ({
-      timestamp: new Date(item.timestamp).getTime(),
-      value: item.pxiValue,
-    })) || [];
+    const rawData = historyData?.history || [];
+    if (!rawData.length) return [];
+
+    // Group by date and take the latest value for each day
+    const dailyData = new Map<string, { timestamp: number; value: number }>();
+
+    rawData.forEach((item: any) => {
+      const date = new Date(item.timestamp);
+      const dateKey = date.toISOString().split('T')[0]; // YYYY-MM-DD
+      const timestamp = new Date(dateKey + 'T12:00:00Z').getTime(); // Noon for each day
+
+      // Keep the latest (or average) value for each day
+      if (!dailyData.has(dateKey) || item.pxiValue !== undefined) {
+        dailyData.set(dateKey, {
+          timestamp,
+          value: item.pxiValue,
+        });
+      }
+    });
+
+    // Convert to array and sort by timestamp
+    return Array.from(dailyData.values()).sort((a, b) => a.timestamp - b.timestamp);
   }, [historyData]);
 
   // Generate smart X-axis ticks (one per unique date)
@@ -348,7 +367,8 @@ export default function Dashboard() {
                   dataKey="value"
                   stroke="#60a5fa"
                   strokeWidth={2}
-                  dot={false}
+                  dot={{ r: 3, fill: '#60a5fa', strokeWidth: 0 }}
+                  activeDot={{ r: 5 }}
                   animationDuration={800}
                 />
               </LineChart>
