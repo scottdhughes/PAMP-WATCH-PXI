@@ -303,6 +303,8 @@ export default function Dashboard() {
                   stroke="#334155"
                   tick={{ fill: '#64748b', fontSize: 10 }}
                   tickFormatter={(value) => new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                  interval="preserveStartEnd"
+                  minTickGap={50}
                 />
                 <YAxis
                   stroke="#334155"
