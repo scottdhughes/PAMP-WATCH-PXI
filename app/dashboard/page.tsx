@@ -102,7 +102,7 @@ export default function Dashboard() {
   const signalMultiplier = cacheData?.indicators?.signalMultiplier || 1.0;
 
   const sharpe = riskData?.sharpe || 0;
-  const maxDrawdown = riskData?.maxDrawdown?.maxDrawdownPercent || 0;
+  const maxDrawdown = riskData?.maxDrawdown?.maxDrawdown || 0; // Use absolute drawdown (z-score units), not percentage
   const volatility = riskData?.volatility || 0;
 
   const regimeColor = getRegimeColor(regime);
@@ -281,11 +281,11 @@ export default function Dashboard() {
           <span className="text-slate-600">Sharpe</span>
           <span className="text-slate-400 font-mono">{sharpe.toFixed(2)}</span>
           <span className="text-slate-800">·</span>
-          <span className="text-slate-600">Drawdown</span>
-          <span className="text-slate-400 font-mono">{maxDrawdown.toFixed(1)}%</span>
+          <span className="text-slate-600">Max Drawdown</span>
+          <span className="text-slate-400 font-mono">{maxDrawdown.toFixed(2)}σ</span>
           <span className="text-slate-800">·</span>
           <span className="text-slate-600">Volatility</span>
-          <span className="text-slate-400 font-mono">{volatility.toFixed(1)}</span>
+          <span className="text-slate-400 font-mono">{(volatility / 100).toFixed(2)}%</span>
         </div>
       </section>
 
