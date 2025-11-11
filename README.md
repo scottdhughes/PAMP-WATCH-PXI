@@ -1,8 +1,8 @@
 # PAMP Index (PXI) Platform
 
-> **Production-ready financial stress index platform** with statistical z-score analysis, 10-year historical backtesting, real-time monitoring, and enterprise-grade security.
+> **Production-ready financial stress index platform** with k-means regime detection, statistical validation, real-time monitoring, and comprehensive backtesting capabilities.
 
-A TypeScript-based platform that aggregates macro/market data from multiple financial APIs (FRED, AlphaVantage, TwelveData, CoinGecko), computes a normalized composite PXI using statistical z-scores with dynamic weighting, and provides real-time visualization via a Next.js dashboard with 30-day historical trend analysis.
+A TypeScript-based platform that aggregates macro/market data from multiple financial APIs (FRED, AlphaVantage, TwelveData, CoinGecko), computes a normalized composite PXI using statistical z-scores, provides k-means clustering for regime classification, and delivers real-time visualization via a Next.js dashboard with regime-aware analytics.
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.4-blue.svg)](https://www.typescriptlang.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-20-green.svg)](https://nodejs.org/)
@@ -17,13 +17,13 @@ A TypeScript-based platform that aggregates macro/market data from multiple fina
 - [Project Structure](#-project-structure)
 - [Prerequisites](#-prerequisites)
 - [Quick Start](#-quick-start)
-- [Configuration](#-configuration)
-- [Database Setup](#-database-setup)
-- [Development](#-development)
+- [PXI Methodology](#-pxi-methodology)
+- [Regime Detection](#-regime-detection)
+- [Validation & Testing](#-validation--testing)
 - [API Documentation](#-api-documentation)
+- [Development](#-development)
 - [Deployment](#-deployment)
 - [Monitoring](#-monitoring)
-- [Security](#-security)
 - [Contributing](#-contributing)
 - [Troubleshooting](#-troubleshooting)
 
@@ -32,19 +32,28 @@ A TypeScript-based platform that aggregates macro/market data from multiple fina
 ## ✨ Features
 
 ### Core Functionality
-- **Statistical Z-Score Analysis**: Calculates z-scores using 10-year rolling window statistics (365-day mean/stddev)
-- **Normalized Weight Calculation**: Ensures weights sum to 1.0 with proper contribution scaling
-- **Dynamic Weighting**: α=1.5 multiplier for |z|>1.0, β=2.0 for |z|>2.0, plus BTC technical indicator signals
-- **Historical Data System**: 30+ days of backfilled PXI data with forward-fill logic for infrequent metrics
-- **Real-time Data Ingestion**: Fetches 7 metrics with retry logic and exponential backoff
-- **Enhanced Dashboard**: Minimalist command-center design with:
-  - Real-time PXI display with regime indicators
-  - 30-day historical trend chart (Recharts)
-  - Expandable system internals with full metric breakdown
-  - Auto-refresh every 30 seconds (React Query)
-  - Framer Motion animations
-- **RESTful API**: Versioned API with multiple endpoints for analytics, history, and risk metrics
-- **Time-Series Database**: TimescaleDB with enhanced schema for z-scores, contributions, and alerts
+- **Statistical Z-Score Analysis**: Calculates z-scores using 90-day rolling window statistics
+- **Weighted Composite Index**: 10 systemic risk metrics with total weight of 11.2
+- **K-Means Regime Detection**: Unsupervised clustering for market regime classification (Calm, Normal, Stress)
+- **Real-Time Dashboard**: Minimalist command-center design with 60-second polling
+- **Historical Analysis**: 30-day trend charts with regime background overlays
+- **Comprehensive Validation**: Multi-layer validation with z-score accuracy testing (≤1e-6 tolerance)
+- **Backtest Engine**: Strategy testing with regime filtering DSL
+
+### Phase 1.5 Regime Detection
+- ✅ **K-Means Clustering**: 3-cluster classification on 10-dimensional feature space (k=3, seed=42)
+- ✅ **Daily Scheduler**: Automated regime computation at 02:30 UTC
+- ✅ **Regime Analytics Dashboard**: Centroids, scatter plots, 30-day drift analysis (`/analytics/regime`)
+- ✅ **Historical Overlays**: Color-coded regime background bands on PXI charts
+- ✅ **Transition Alerts**: Slack/Discord webhook notifications on regime changes
+- ✅ **Backtest Integration**: Regime-aware strategy testing with performance breakdown
+
+### PXI Validation System
+- ✅ **Comprehensive Test Suite**: Metric-level, composite, system-level, and data integrity checks
+- ✅ **Validation Reporting**: Daily JSON validation logs with z-score recomputation
+- ✅ **Methodology Documentation**: Complete explanation of PXI calculation and interpretation
+- ✅ **Dashboard Enhancements**: Δ7D and Δ30D delta displays with color coding
+- ✅ **Acceptance Criteria**: Z-score ≤1e-6, composite ≤0.001, correlation checks
 
 ### Production Features
 - ✅ **Error Handling**: Comprehensive error handling with retry logic and exponential backoff
@@ -55,15 +64,6 @@ A TypeScript-based platform that aggregates macro/market data from multiple fina
 - ✅ **Health Checks**: Database connectivity testing at `/healthz`
 - ✅ **Structured Logging**: Pino logger with request ID tracking
 - ✅ **Graceful Shutdown**: Proper cleanup of connections and resources
-- ✅ **Connection Pooling**: Configurable PostgreSQL connection pools
-- ✅ **Input Validation**: Type-safe validation with hard limits
-
-### Monitoring & Observability
-- 📊 Metrics endpoint at `/metrics`
-- 📝 Structured JSON logging with correlation IDs
-- 🔍 Stale feed detection (>5 minutes)
-- ⚠️ Breach detection (Stress/Caution/Stable/PAMP)
-- 📈 Database query performance tracking
 
 ---
 
@@ -76,23 +76,27 @@ A TypeScript-based platform that aggregates macro/market data from multiple fina
 │   Vantage, etc) │     └──────────────────┘     └─────────────────┘
 └─────────────────┘                                       │
                                                           ▼
-                                               ┌─────────────────┐
-                                               │ Compute Engine  │
-                                               │ (PXI Algorithm) │
-                                               └─────────────────┘
+                                               ┌─────────────────────┐
+                                               │  Compute Engines    │
+                                               │  • PXI Algorithm    │
+                                               │  • K-Means Regime   │
+                                               │  • Validation       │
+                                               └─────────────────────┘
                                                           │
                                                           ▼
 ┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
-│   Next.js UI    │◀────│   Fastify API    │◀────│   Composites    │
-│  (Dashboard)    │     │ (v1, cached)     │     │     Table       │
-└─────────────────┘     └──────────────────┘     └─────────────────┘
+│   Next.js UI    │◀────│   Fastify API    │◀────│   Composites &  │
+│  • Dashboard    │     │ (v1, cached)     │     │  Regime Tables  │
+│  • Analytics    │     └──────────────────┘     └─────────────────┘
+└─────────────────┘
 ```
 
 ### Data Flow
 1. **Ingestion**: External APIs → Fetchers (with retry) → Validator → Database
 2. **Computation**: Database → PXI Algorithm → Composites Table
-3. **API**: Composites → Cache → Response Builder → Client
-4. **UI**: Polling → API → React Components → User
+3. **Regime Detection**: Daily scheduler (02:30 UTC) → K-Means → Regime Table
+4. **API**: Composites → Cache → Response Builder → Client
+5. **UI**: Polling (60s) → API → React Components → User
 
 ---
 
@@ -100,56 +104,78 @@ A TypeScript-based platform that aggregates macro/market data from multiple fina
 
 ```
 PAMP-WATCH-PXI/
-├── app/                         # Next.js App Router
-│   ├── dashboard/page.tsx       # Ornn-style minimalist dashboard
-│   ├── layout.tsx               # Root layout with React Query provider
-│   └── providers.tsx            # React Query client configuration
+├── app/                          # Next.js App Router
+│   ├── dashboard/page.tsx        # Main PXI dashboard with deltas & regime bands
+│   ├── analytics/regime/page.tsx # Regime analytics (centroids, scatter, drift)
+│   ├── layout.tsx                # Root layout with React Query provider
+│   └── providers.tsx             # React Query client configuration
 │
-├── shared/                      # Shared types and configuration
-│   ├── types.ts                 # TypeScript type definitions
-│   ├── pxiMetrics.ts           # Metric bounds, weights, risk directions
-│   └── index.ts                 # Module exports
+├── shared/                       # Shared types and configuration
+│   ├── types.ts                  # TypeScript type definitions
+│   ├── pxiMetrics.ts            # Metric bounds, weights, risk directions
+│   └── index.ts                  # Module exports
 │
-├── workers/                     # Background computation workers
-│   ├── compute-worker.ts        # Enhanced PXI calculation with normalized weights
-│   ├── ingest-worker.ts         # Real-time data ingestion
-│   ├── backfill-worker.ts       # Historical FRED data (10 years)
-│   ├── backfill-btc-worker.ts   # Historical BTC data (1 year)
+├── workers/                      # Background computation workers
+│   ├── compute-worker.ts         # PXI calculation with normalized weights
+│   ├── compute-regime.ts         # K-means clustering (k=3, seed=42)
+│   ├── ingest-worker.ts          # Real-time data ingestion
+│   ├── backfill-worker.ts        # Historical FRED data (10 years)
+│   ├── backfill-btc-worker.ts    # Historical BTC data (1 year)
 │   └── daily-indicator-worker.ts # BTC technical indicators (RSI/MACD)
 │
-├── scripts/                     # Database and utility scripts
+├── lib/                          # Core libraries
+│   └── backtest-engine.ts        # Backtest engine with regime filtering DSL
+│
+├── scripts/                      # Database and utility scripts
+│   ├── validate-pxi.ts           # Validation reporting (JSON logs)
 │   ├── populate-historical-pxi-v3.sql  # Forward-fill historical PXI
 │   └── compute-historical-pxi.ts       # TypeScript backfill alternative
 │
-├── clients/                     # External API clients (with retry logic)
-│   ├── fredClient.ts           # Federal Reserve Economic Data
-│   ├── alphaVantageClient.ts   # AlphaVantage (VIX)
-│   ├── twelveDataClient.ts     # TwelveData (DXY)
-│   └── coinGeckoClient.ts      # CoinGecko (BTC)
+├── tests/                        # Test suites
+│   ├── pxi_validation.test.ts    # Comprehensive PXI validation (Vitest)
+│   ├── config.test.ts            # Configuration validation tests
+│   ├── security.test.ts          # Security tests
+│   └── validator.test.ts         # Input validation tests
 │
-├── migrations/                  # Database migrations
-│   ├── 001_initial_schema.sql  # TimescaleDB setup
-│   ├── 002_enhanced_schema.sql # Z-scores, contributions, alerts
-│   └── 003_btc_indicators.sql  # Technical indicators table
+├── clients/                      # External API clients (with retry logic)
+│   ├── fredClient.ts            # Federal Reserve Economic Data
+│   ├── alphaVantageClient.ts    # AlphaVantage (VIX)
+│   ├── twelveDataClient.ts      # TwelveData (DXY)
+│   └── coinGeckoClient.ts       # CoinGecko (BTC)
 │
-├── utils/                       # Utility functions
-│   ├── fetcher.ts              # API fetch utility for React Query
-│   └── analytics.ts            # Risk metrics (Sharpe, Sortino, drawdown)
+├── migrations/                   # Database migrations
+│   ├── 001_initial_schema.sql   # TimescaleDB setup
+│   ├── 002_enhanced_schema.sql  # Z-scores, contributions, alerts
+│   ├── 003_btc_indicators.sql   # Technical indicators table
+│   └── 007_add_pxi_regimes.sql  # K-means regime table
 │
-├── config.ts                    # Environment variable validation
-├── db.ts                        # Database connection pool & enhanced queries
-├── server.ts                    # Fastify API with multiple endpoints
-├── fetchers.ts                  # Metric fetcher orchestration
-├── validator.ts                 # Input validation with hard limits
-├── buildLatestResponse.ts       # API response builder (regime-aware)
-├── logger.ts                    # Pino logger configuration
-├── monitoring.ts                # Stale feed detection
+├── docs/                         # Documentation
+│   └── pxi-methodology.md        # Complete PXI calculation methodology
 │
-├── docker-compose.yml           # Local development with TimescaleDB
-├── .env.example                 # Environment variable template
-├── package.json                 # Dependencies and scripts
-├── tsconfig.json                # TypeScript configuration
-└── README.md                    # This file
+├── utils/                        # Utility functions
+│   ├── fetcher.ts               # API fetch utility for React Query
+│   └── analytics.ts             # Risk metrics (Sharpe, Sortino, drawdown)
+│
+├── hooks/                        # React hooks
+│   └── useDashboardSnapshot.ts  # Dashboard polling hook
+│
+├── components/                   # React components
+│   └── StaleIndicator.tsx       # Stale data indicator component
+│
+├── config.ts                     # Environment variable validation
+├── db.ts                         # Database connection pool & queries
+├── server.ts                     # Fastify API with regime endpoints
+├── scheduler.ts                  # Cron scheduler with regime detection
+├── fetchers.ts                   # Metric fetcher orchestration
+├── validation.ts                 # Quantitative validation layer
+├── buildLatestResponse.ts        # API response builder (regime-aware)
+├── logger.ts                     # Pino logger configuration
+│
+├── docker-compose.yml            # Local development with TimescaleDB
+├── .env.example                  # Environment variable template
+├── package.json                  # Dependencies and scripts
+├── tsconfig.json                 # TypeScript configuration
+└── README.md                     # This file
 ```
 
 ---
@@ -193,206 +219,273 @@ DATABASE_URL=postgresql://pxi:password@localhost:5432/pxi
 
 ### 3. Start Database
 
-**Option A: Using Docker Compose** (Recommended)
+**Using Docker Compose** (Recommended)
 ```bash
-# Make sure to set POSTGRES_PASSWORD in .env first
 docker-compose up -d timescaledb
 ```
 
-**Option B: Local TimescaleDB**
+**Apply Migrations:**
 ```bash
-# Apply migration
 psql $DATABASE_URL -f migrations/001_initial_schema.sql
+psql $DATABASE_URL -f migrations/002_enhanced_schema.sql
+psql $DATABASE_URL -f migrations/007_add_pxi_regimes.sql
 ```
 
-### 4. Start the API Server
+### 4. Start Services
 
 ```bash
+# Start API server
 npm run server
-```
 
-The API will be available at `http://localhost:8787`
-
-### 5. Start the Dashboard (Optional)
-
-```bash
+# Start dashboard (optional)
 npm run dev
+
+# Start scheduler (for regime detection)
+npm run scheduler
 ```
 
-Dashboard available at `http://localhost:3000`
+**Access Points:**
+- API: `http://localhost:8787`
+- Dashboard: `http://localhost:3000`
+- Regime Analytics: `http://localhost:3000/analytics/regime`
 
 ---
 
-## ⚙️ Configuration
+## 🧮 PXI Methodology
 
-### Environment Variables
+### What is PXI?
 
-See `.env.example` for a complete list. Key variables:
+**PXI (Panic Index)** is a **weighted composite z-score** that measures normalized macro-financial stress across 10 systemic risk indicators.
 
-#### API Keys (Required)
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `FRED_API_KEY` | Federal Reserve Economic Data API key | `abcd1234...` |
-| `ALPHA_VANTAGE_API_KEY` | AlphaVantage API key for VIX | `DEMO` |
-| `TWELVEDATA_API_KEY` | TwelveData API key for DXY | `xyz789...` |
+- **PXI = 0**: Neutral stress (average historical conditions)
+- **PXI > 0**: Elevated stress (above historical average)
+- **PXI < 0**: Subdued stress (below historical average)
 
-#### Database (Required)
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `DATABASE_URL` | - | PostgreSQL connection string |
-| `DB_POOL_MAX` | `10` | Maximum connection pool size |
-| `DB_POOL_MIN` | `2` | Minimum connection pool size |
+### Calculation
 
-#### Server Configuration
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `PORT` | `8787` | API server port |
-| `HOST` | `0.0.0.0` | Host binding |
-| `NODE_ENV` | `development` | Environment mode |
+```typescript
+// 1. Calculate z-scores (90-day rolling window)
+z_i = (value_i - μ_i) / σ_i
 
-#### Security
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `CORS_ORIGINS` | `*` | Comma-separated allowed origins |
-| `RATE_LIMIT_MAX` | `100` | Max requests per window |
-| `RATE_LIMIT_WINDOW` | `1 minute` | Rate limit time window |
+// 2. Apply polarity (negative polarity = invert z-score)
+z_adjusted_i = z_i × polarity_multiplier
 
-#### Caching
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `CACHE_ENABLED` | `true` | Enable response caching |
-| `CACHE_TTL_SECONDS` | `10` | Cache TTL in seconds |
+// 3. Calculate weighted composite
+PXI = Σ (z_adjusted_i × w_i) / Σ w_i
+```
 
-#### Monitoring
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `LOG_LEVEL` | `info` | Log level (debug/info/warn/error) |
-| `STALE_THRESHOLD_MS` | `300000` | Stale feed threshold (5 min) |
+### Metrics & Weights
+
+| Metric | Weight | Polarity | Description |
+|--------|--------|----------|-------------|
+| **VIX Index** | 1.8 | Negative | CBOE Volatility Index (fear gauge) |
+| **HY OAS** | 1.5 | Negative | High-yield credit spread |
+| **STLFSI** | 1.4 | Negative | St. Louis Fed Financial Stress Index |
+| **NFCI** | 1.3 | Negative | Chicago Fed National Financial Conditions |
+| **IG OAS** | 1.2 | Negative | Investment-grade credit spread |
+| **Yield Curve (10y-2y)** | 1.2 | Positive | Treasury yield curve slope |
+| **Unemployment (U-3)** | 1.0 | Negative | Official unemployment rate |
+| **BTC Daily Return** | 1.0 | Positive | Risk appetite proxy |
+| **USD Index** | 0.8 | Positive | Broad trade-weighted dollar |
+| **10y Breakeven Inflation** | 0 | Negative | Display-only (excluded from weighting) |
+
+**Total Active Weight:** 11.2
+
+See `docs/pxi-methodology.md` for complete methodology documentation.
 
 ---
 
-## 🧮 PXI Calculation Methodology
+## 🎯 Regime Detection
 
-### Statistical Z-Score Analysis
+### K-Means Clustering
 
-The PXI uses a **normalized statistical approach** based on 10-year rolling window z-scores:
+The system uses **unsupervised k-means clustering** (k=3, seed=42) on the 10-dimensional z-score feature space to classify market conditions:
 
-```typescript
-z-score = (current_value - rolling_mean) / rolling_stddev
+- **Calm**: Low-stress cluster (generally PXI < 0)
+- **Normal**: Moderate-stress cluster (generally -1 < PXI < 1)
+- **Stress**: High-stress cluster (generally PXI > 1)
+
+### Regime Analytics Dashboard
+
+Access at `/analytics/regime`:
+
+- **Cluster Centroids**: Mean z-scores for each regime across all features
+- **VIX vs HY OAS Scatter**: Regime classification visualization
+- **30-Day Drift Analysis**: Recent centroid drift from historical mean
+- **Feature Importance**: Identify which metrics drive regime classification
+
+### Regime Transition Alerts
+
+Configure webhooks in `.env`:
+```env
+ALERT_ENABLED=true
+ALERT_WEBHOOK_URL=https://hooks.slack.com/services/YOUR/WEBHOOK/URL
 ```
 
-- **Rolling Window**: 365-day historical statistics for each metric
-- **Normalization**: Weights are normalized to sum = 1.0
-- **Direction**: Risk direction multipliers ensure consistent interpretation
-  - `higher_is_more_risk` (e.g., VIX): direction = -1
-  - `higher_is_less_risk` (e.g., HY OAS): direction = 1
-
-### Dynamic Weighting
-
-Weights are dynamically adjusted based on z-score magnitude:
-
-| Z-Score Range | Multiplier | Description |
-|---------------|------------|-------------|
-| \|z\| ≤ 1.0 | 1.0 | Normal conditions |
-| 1.0 < \|z\| ≤ 2.0 | α = 1.5 | Elevated signal |
-| \|z\| > 2.0 | β = 2.0 | Strong signal |
-
-### BTC Technical Indicators
-
-Bitcoin returns include a **signal multiplier** from technical analysis:
-
-```typescript
-signal_multiplier = 1.0 + (RSI - 50) / 100 + (MACD_histogram > 0 ? 0.1 : -0.1)
-```
-
-- **RSI (14-day)**: Relative Strength Index
-- **MACD (12,26,9)**: Moving Average Convergence Divergence
-- **Update Frequency**: Twice daily (00:05 and 12:05 UTC)
-
-### Composite Calculation
-
-```typescript
-// 1. Normalize weights to sum = 1.0
-normalized_weight[i] = actual_weight[i] / total_weight
-
-// 2. Calculate contributions
-contribution[i] = normalized_weight[i] × z_score[i] × direction[i]
-
-// 3. Sum contributions
-PXI = Σ contribution[i]
-
-// 4. Clamp to realistic range
-PXI = clamp(PXI, -3, 3)
-```
-
-### Regime Classification
-
-| PXI Range | Regime | Interpretation |
-|-----------|--------|----------------|
-| PXI > 2.0 | Strong PAMP | Very low systemic stress |
-| 1.0 < PXI ≤ 2.0 | Moderate PAMP | Low stress |
-| -1.0 ≤ PXI ≤ 1.0 | Normal | Normal conditions |
-| -2.0 ≤ PXI < -1.0 | Elevated Stress | Heightened stress |
-| PXI < -2.0 | Crisis | High systemic stress |
-
-### Example Output
-
-```
-Metric      Z-Score  Weight   Contribution
-─────────────────────────────────────────
-hyOas       -0.854   0.1648   +0.1408
-igOas       -1.113   0.1978   +0.2203
-vix         +0.078   0.1978   -0.0155
-u3          -0.168   0.1099   +0.0185
-usd         +0.939   0.0879   +0.0826
-nfci        -0.420   0.1429   +0.0600
-btcReturn   -0.099   0.0989   -0.0098
-─────────────────────────────────────────
-                              = +0.497
-
-Regime: Stable
-Weight Sum: 1.0000
-```
+Alerts are triggered when regime changes (e.g., Normal → Stress).
 
 ---
 
-## 🗄 Database Setup
+## ✅ Validation & Testing
 
-### Migration
+### Comprehensive Test Suite
 
-The platform includes a comprehensive migration script that sets up:
-- TimescaleDB hypertables with automatic partitioning
-- Indexes for optimal query performance
-- Retention policies (90 days for samples, 1 year for composites)
-- Continuous aggregates for hourly rollups
-
+Run validation tests:
 ```bash
-# Run migration
-psql $DATABASE_URL -f migrations/001_initial_schema.sql
+npm test tests/pxi_validation.test.ts
 ```
 
-### Schema Overview
+**Test Coverage:**
+- Metric-level validation (z-score accuracy ≤1e-6)
+- Composite PXI recomputation (≤0.001 tolerance)
+- System-level sanity checks (PXI range, correlations)
+- Data integrity (no NULLs, duplicates, stale data)
+- Regime alignment checks
 
-#### `pxi_metric_samples`
-Stores raw metric data from external APIs.
+### Validation Reporting
 
-```sql
-(metric_id, source_timestamp) PRIMARY KEY
-Indexes: metric_id + source_timestamp, ingested_at
-Retention: 90 days
+Generate daily validation logs:
+```bash
+npx tsx scripts/validate-pxi.ts
 ```
 
-#### `pxi_composites`
-Stores computed PXI composite scores.
+Outputs JSON summary to `logs/validation/pxi_validation_YYYY-MM-DD.json` with:
+- Z-score accuracy for each metric
+- Manual PXI recomputation vs stored value
+- Total weight verification
+- Error details
 
-```sql
-id BIGSERIAL PRIMARY KEY
-Indexes: calculated_at, pxi
-Retention: 1 year
+### Acceptance Criteria
+
+✅ Z-score match: ≤1e-6 tolerance
+✅ Composite PXI match: ≤0.001 tolerance
+✅ Total weight: 11.2 (excluding zero-weight metrics)
+✅ VIX-HY OAS correlation: Positive
+✅ Data freshness: <7 days
+
+---
+
+## 📡 API Documentation
+
+### Base URL
+```
+Development: http://localhost:8787
 ```
 
-#### `pxi_hourly_metrics` (Continuous Aggregate)
-Automatically maintained hourly rollups for analytics.
+### Core Endpoints
+
+#### `GET /v1/pxi/latest`
+Latest PXI composite with regime classification and Δ7D/Δ30D deltas.
+
+**Response:**
+```json
+{
+  "pxi": 0.497,
+  "statusLabel": "Calm – +0.50",
+  "calculatedAt": "2025-11-11T12:00:00Z",
+  "metrics": [...],
+  "regime": {
+    "regime": "Calm",
+    "pxiValue": 0.497
+  }
+}
+```
+
+#### `GET /v1/pxi/regime/latest`
+Latest k-means regime classification with probabilities and centroids.
+
+**Response:**
+```json
+{
+  "regime": "Calm",
+  "date": "2025-11-11",
+  "probabilities": {
+    "Calm": 0.85,
+    "Normal": 0.12,
+    "Stress": 0.03
+  },
+  "centroid": {
+    "vix_zscore": -0.8,
+    "hyOas_zscore": -0.6,
+    ...
+  }
+}
+```
+
+#### `GET /v1/pxi/regime/history?days=90`
+Historical regime classifications for chart overlays.
+
+**Query Parameters:**
+- `days` (optional): Number of days (1-365, default: 90)
+
+**Response:**
+```json
+{
+  "regimes": [
+    {
+      "date": "2025-11-11",
+      "regime": "Calm",
+      "pxiValue": 0.497,
+      "probabilities": {...},
+      "centroid": {...}
+    }
+  ],
+  "count": 90
+}
+```
+
+#### `POST /v1/pxi/backtest`
+Run backtest with regime filtering DSL.
+
+**Request Body:**
+```json
+{
+  "startDate": "2025-01-01",
+  "endDate": "2025-11-11",
+  "initialCapital": 100000,
+  "rules": [
+    {
+      "name": "Stress Regime Short",
+      "when": {
+        "regime": ["Stress"],
+        "pxi": { "gt": 1.0 }
+      },
+      "action": "short"
+    }
+  ]
+}
+```
+
+**Response:**
+```json
+{
+  "totalReturn": 8.5,
+  "cagr": 15.2,
+  "sharpe": 1.45,
+  "maxDrawdown": 12.3,
+  "trades": 42,
+  "winRate": 65.4,
+  "regimeBreakdown": {
+    "Stress": {
+      "trades": 15,
+      "return": 12.3,
+      "cagr": 25.6,
+      "sharpe": 2.1
+    }
+  }
+}
+```
+
+#### `GET /v1/pxi/history?days=30`
+Historical PXI data for charting.
+
+#### `GET /v1/pxi/analytics/risk-metrics`
+Comprehensive risk analytics (Sharpe, Sortino, max drawdown, volatility).
+
+#### `GET /healthz`
+Health check with database connectivity test.
+
+See full API documentation in the code comments.
 
 ---
 
@@ -402,280 +495,37 @@ Automatically maintained hourly rollups for analytics.
 
 ```bash
 # Development
-npm run dev          # Start Next.js dashboard dev server (localhost:3000)
-npm run server       # Start API server (localhost:8787)
-
-# Build
-npm run build        # Build Next.js application
-npm run compile      # Compile TypeScript to JavaScript
+npm run dev              # Start Next.js dashboard (localhost:3000)
+npm run server           # Start API server (localhost:8787)
+npm run scheduler        # Start cron scheduler with regime detection
 
 # Workers
-npm run worker:compute        # Run PXI calculation worker (one-time)
-npm run worker:backfill       # Backfill 10 years of FRED historical data
-npm run worker:backfill:btc   # Backfill 1 year of BTC historical data
-npm run worker:ingest         # Manual data ingestion run
+npm run worker:compute            # Run PXI calculation (one-time)
+npm run worker:compute:regime     # Run regime detection (one-time)
+npm run worker:backfill           # Backfill 10 years FRED data
+npm run worker:backfill:btc       # Backfill 1 year BTC data
+npm run worker:ingest             # Manual data ingestion
 
-# Historical Data
-psql $DATABASE_URL -f scripts/populate-historical-pxi-v3.sql  # Populate 30 days of historical PXI
+# Validation
+npx tsx scripts/validate-pxi.ts   # Generate validation report
+npm test                          # Run all tests
+npm test tests/pxi_validation.test.ts  # Run PXI validation tests
 
-# Testing
-npm run test         # Run tests with Vitest
-npm run test:ui      # Run tests with UI
+# Build
+npm run build            # Build Next.js application
+npm run compile          # Compile TypeScript to JavaScript
 
-# Linting
-npm run lint         # Run Next.js linter
+# Utilities
+npm run lint             # Run linter
 ```
 
-### Adding New Metrics
+### Scheduler Configuration
 
-1. **Define metric in shared config** (`shared/pxiMetrics.ts`):
-```typescript
-{
-  id: 'newMetric',
-  label: 'New Metric',
-  lowerBound: 0,
-  upperBound: 100,
-  weight: 1.0,
-  polarity: 'positive',
-}
-```
-
-2. **Create fetcher** (`fetchers.ts`):
-```typescript
-{
-  id: 'newMetric',
-  label: 'New Metric',
-  fetch: withErrorHandling('newMetric', async () => {
-    // Fetch logic here
-    return {
-      id: 'newMetric',
-      label: 'New Metric',
-      value: fetchedValue,
-      unit: 'index',
-      sourceTimestamp: timestamp,
-      ingestedAt: new Date().toISOString(),
-    };
-  }),
-}
-```
-
-3. **Add validation limits** (`validator.ts`):
-```typescript
-const HARD_LIMITS: Record<MetricId, { min: number; max: number }> = {
-  // ...
-  newMetric: { min: 0, max: 100 },
-};
-```
-
-4. **Update TypeScript types** (`shared/types.ts`):
-```typescript
-export type MetricId =
-  | 'hyOas'
-  | 'igOas'
-  | 'vix'
-  | 'u3'
-  | 'usd'
-  | 'nfci'
-  | 'btcReturn'
-  | 'newMetric'; // Add here
-```
-
----
-
-## 📡 API Documentation
-
-### Base URL
-```
-Production: https://api.yourdomain.com
-Development: http://localhost:8787
-```
-
-### Endpoints
-
-#### `GET /healthz`
-Health check endpoint with database connectivity test.
-
-**Response:**
-```json
-{
-  "status": "healthy",
-  "timestamp": "2025-11-10T12:00:00Z",
-  "uptime": 3600.5
-}
-```
-
-#### `GET /v1/pxi/latest`
-Fetch the latest PXI composite data with regime classification.
-
-**Headers:**
-- `X-Cache`: `HIT` or `MISS` (cache status)
-
-**Response:**
-```json
-{
-  "pxi": 0.497,
-  "statusLabel": "Stable – +0.50",
-  "zScore": 0.497,
-  "calculatedAt": "2025-11-10T12:00:00Z",
-  "metrics": [
-    {
-      "id": "hyOas",
-      "label": "HY OAS",
-      "value": 0.045,
-      "delta": 0.001,
-      "lower": 0.03,
-      "upper": 0.08,
-      "zScore": -0.854,
-      "contribution": 0.1408,
-      "breach": "Stable"
-    }
-  ],
-  "ticker": ["VIX Index - PAMP"],
-  "alerts": [
-    {
-      "id": 123,
-      "alertType": "high_z_score",
-      "indicatorId": "vix",
-      "timestamp": "2025-11-10T12:00:00Z",
-      "zScore": 2.1,
-      "message": "VIX z-score 2.10 exceeds threshold",
-      "severity": "warning"
-    }
-  ],
-  "regime": {
-    "regime": "Stable",
-    "pxiValue": 0.497,
-    "totalWeight": 9.1,
-    "pampCount": 0,
-    "stressCount": 0
-  }
-}
-```
-
-#### `GET /v1/pxi/metrics/latest`
-Get underlying metrics with z-scores and contributions.
-
-**Response:**
-```json
-{
-  "metrics": [
-    {
-      "id": "hyOas",
-      "label": "HY OAS",
-      "value": 0.045,
-      "delta": 0.001,
-      "lower": 0.03,
-      "upper": 0.08,
-      "zScore": -0.854,
-      "contribution": 0.1408,
-      "status": "Stable",
-      "unit": "decimal"
-    }
-  ]
-}
-```
-
-#### `GET /v1/pxi/history?days=30`
-Get historical PXI data for charting.
-
-**Query Parameters:**
-- `days` (optional): Number of days to fetch (1-90, default: 30)
-
-**Response:**
-```json
-{
-  "history": [
-    {
-      "timestamp": "2025-10-12T12:00:00.000Z",
-      "pxiValue": -0.453,
-      "regime": "Stable"
-    }
-  ],
-  "days": 30,
-  "count": 44
-}
-```
-
-#### `GET /v1/pxi/analytics/risk-metrics`
-Get comprehensive risk analytics (Sharpe, Sortino, max drawdown, volatility).
-
-**Response:**
-```json
-{
-  "sharpe": 1.2345,
-  "sortino": 1.5678,
-  "maxDrawdown": {
-    "maxDrawdownPercent": 15.23,
-    "peakValue": 2.5,
-    "troughValue": -1.2,
-    "peakIndex": 10,
-    "troughIndex": 25,
-    "peakTimestamp": "2025-10-15T12:00:00Z",
-    "troughTimestamp": "2025-10-20T12:00:00Z"
-  },
-  "volatility": 12.45,
-  "cumulativeReturn": 8.9,
-  "daysAnalyzed": 85
-}
-```
-
-#### `GET /v1/pxi/indicators/cache-status`
-Get BTC technical indicators cache status.
-
-**Response:**
-```json
-{
-  "cached": true,
-  "status": "fresh",
-  "date": "2025-11-10",
-  "updatedAt": "2025-11-10T12:05:00Z",
-  "ageHours": 2.5,
-  "thresholds": {
-    "warning": 36,
-    "stale": 48
-  },
-  "indicators": {
-    "rsi": 45.67,
-    "macdValue": 123.45,
-    "macdSignal": 120.32,
-    "signalMultiplier": 1.025
-  },
-  "nextUpdate": "Twice daily at 00:05 and 12:05 UTC"
-}
-```
-
-#### `GET /pxi/latest` (Legacy)
-Redirects to `/v1/pxi/latest` with 301 status.
-
-#### `GET /metrics`
-Monitoring metrics endpoint.
-
-**Response:**
-```json
-{
-  "uptime": 3600.5,
-  "memoryUsage": {
-    "rss": 52428800,
-    "heapTotal": 18874368,
-    "heapUsed": 12345678,
-    "external": 123456
-  },
-  "cacheSize": 5,
-  "timestamp": "2025-11-10T12:00:00Z"
-}
-```
-
-### Rate Limits
-- Default: 100 requests per minute per IP
-- Localhost exempted
-- Returns `429` when exceeded
-- Headers: `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`
-
-### Caching
-- Default TTL: 10 seconds
-- Cache key: `pxi:latest`
-- Check `X-Cache` header for cache status
-- Configurable via `CACHE_TTL_SECONDS`
+The scheduler runs automated tasks:
+- **00:05 UTC**: Daily BTC indicator computation
+- **02:00 UTC**: Daily data ingestion (FRED, AlphaVantage, etc.)
+- **02:30 UTC**: Daily regime detection (k-means)
+- **12:05 UTC**: Midday BTC indicator update
 
 ---
 
@@ -701,143 +551,47 @@ docker-compose down
 - [ ] Set `NODE_ENV=production`
 - [ ] Enable HTTPS/TLS
 - [ ] Configure rate limits appropriately
-- [ ] Set up log aggregation (CloudWatch, Datadog, etc.)
-- [ ] Configure alerts for stale feeds
+- [ ] Set up log aggregation
+- [ ] Configure alerts for stale feeds and regime transitions
 - [ ] Set up database backups
 - [ ] Monitor `/healthz` endpoint
-- [ ] Enable query performance monitoring
-
-### Environment-Specific Configs
-
-**Development:**
-```env
-NODE_ENV=development
-LOG_LEVEL=debug
-CACHE_ENABLED=false
-CORS_ORIGINS=*
-```
-
-**Production:**
-```env
-NODE_ENV=production
-LOG_LEVEL=info
-CACHE_ENABLED=true
-CORS_ORIGINS=https://yourdomain.com,https://dashboard.yourdomain.com
-RATE_LIMIT_MAX=1000
-DB_POOL_MAX=20
-```
-
-### Kubernetes Deployment
-
-See `cronjobs.yaml` and `timescaledb.yaml` for Kubernetes manifests.
-
-```bash
-kubectl apply -f timescaledb.yaml
-kubectl apply -f cronjobs.yaml
-```
+- [ ] Run validation tests: `npm test`
+- [ ] Verify regime detection: Check `pxi_regimes` table
 
 ---
 
 ## 📊 Monitoring
 
-### Logging
+### Key Metrics to Monitor
 
-All logs are structured JSON via Pino:
+1. **PXI Accuracy**
+   - Z-score accuracy (should be ≤1e-6)
+   - Composite PXI match (should be ≤0.001)
+   - Total weight verification (11.2)
 
-```json
-{
-  "level": 30,
-  "time": 1699545600000,
-  "pid": 12345,
-  "hostname": "api-server",
-  "reqId": "req-xyz",
-  "msg": "Request completed",
-  "responseTime": 45
-}
-```
+2. **Regime Detection**
+   - Daily regime computation success rate
+   - Regime transition frequency
+   - Centroid drift analysis
 
-**Log Levels:**
-- `fatal` (60): Process terminating
-- `error` (50): Operation failed
-- `warn` (40): Unexpected situation
-- `info` (30): Normal operation
-- `debug` (20): Detailed debugging
-- `trace` (10): Very detailed
-
-### Metrics to Monitor
-
-1. **API Performance**
+3. **API Performance**
    - Request latency (p50, p95, p99)
-   - Error rate
    - Cache hit rate
-   - Rate limit rejections
+   - Error rate
 
-2. **Database**
-   - Connection pool utilization
-   - Query performance
-   - Failed queries
+4. **Data Quality**
    - Stale data warnings
-
-3. **External APIs**
-   - Fetch success rate
-   - Retry counts
-   - API quota usage
-   - Response times
-
-4. **System**
-   - Memory usage
-   - CPU usage
-   - Process uptime
-   - Heap size
+   - NULL value counts
+   - Duplicate timestamp checks
 
 ### Alerts
 
 Configure alerts for:
-- ⚠️ Health check failures
-- ⚠️ Error rate >1%
+- ⚠️ PXI validation failures
+- ⚠️ Regime detection failures
 - ⚠️ Stale feeds >5 minutes
+- ⚠️ Z-score accuracy >1e-6
 - ⚠️ Database connection failures
-- ⚠️ Memory usage >80%
-- ⚠️ API quota approaching limits
-
----
-
-## 🔒 Security
-
-### Implemented Security Measures
-
-1. **API Security**
-   - ✅ CORS whitelist configuration
-   - ✅ Rate limiting (100 req/min default)
-   - ✅ Input validation on all endpoints
-   - ✅ Request ID tracking
-
-2. **Database Security**
-   - ✅ Parameterized queries (SQL injection prevention)
-   - ✅ Connection pooling with limits
-   - ✅ Environment-based credentials
-   - ✅ TLS/SSL support
-
-3. **Configuration Security**
-   - ✅ API key validation (format and length)
-   - ✅ No hardcoded credentials
-   - ✅ Environment variable validation
-   - ✅ Secure defaults
-
-4. **Error Handling**
-   - ✅ No sensitive data in error messages
-   - ✅ Graceful degradation
-   - ✅ Proper error logging without exposing internals
-
-### Security Best Practices
-
-- 🔐 Rotate API keys regularly
-- 🔐 Use strong database passwords (16+ chars)
-- 🔐 Enable database encryption at rest
-- 🔐 Use TLS for all connections
-- 🔐 Implement API authentication for production
-- 🔐 Regular security audits
-- 🔐 Keep dependencies updated
 
 ---
 
@@ -847,8 +601,8 @@ Configure alerts for:
 
 1. Create a feature branch
 2. Make changes with tests
-3. Run linter: `npm run lint`
-4. Run tests: `npm run test`
+3. Run validation: `npm test`
+4. Run linter: `npm run lint`
 5. Commit with descriptive messages
 6. Push and create pull request
 
@@ -857,17 +611,8 @@ Configure alerts for:
 - TypeScript strict mode enabled
 - ESLint + Prettier for formatting
 - JSDoc comments for public functions
-- Meaningful variable names
-- Error handling on all async operations
-
-### Testing
-
-Write tests for:
-- ✅ API endpoints
-- ✅ Database operations
-- ✅ External API clients
-- ✅ Validation logic
-- ✅ Metric calculations
+- Comprehensive error handling
+- Test coverage for critical paths
 
 ---
 
@@ -875,16 +620,37 @@ Write tests for:
 
 ### Common Issues
 
-**API won't start:**
+**Dashboard not showing deltas:**
 ```bash
-# Check environment variables
-node -e "require('dotenv').config(); console.log(process.env)"
+# Check historical data exists
+psql $DATABASE_URL -c "SELECT COUNT(*) FROM composite_pxi_regime WHERE timestamp >= NOW() - INTERVAL '30 days';"
 
-# Test database connection
-psql $DATABASE_URL -c "SELECT 1"
+# Verify API returns history
+curl http://localhost:8787/v1/pxi/history?days=30
+```
+
+**Regime detection not running:**
+```bash
+# Check scheduler is running
+ps aux | grep scheduler
+
+# Manually trigger regime detection
+npm run worker:compute:regime
+
+# Check regime data
+psql $DATABASE_URL -c "SELECT * FROM pxi_regimes ORDER BY date DESC LIMIT 5;"
+```
+
+**Validation tests failing:**
+```bash
+# Check z-score tolerance
+npm test tests/pxi_validation.test.ts
+
+# Generate validation report
+npx tsx scripts/validate-pxi.ts
 
 # Check logs
-tail -f logs/api.log
+cat logs/validation/pxi_validation_*.json
 ```
 
 **Database connection fails:**
@@ -892,53 +658,18 @@ tail -f logs/api.log
 # Verify TimescaleDB is running
 docker-compose ps timescaledb
 
-# Check connection string
-echo $DATABASE_URL
-
 # Test connection
 psql $DATABASE_URL -c "\dt"
 ```
-
-**External API failures:**
-```bash
-# Check API keys are set
-env | grep API_KEY
-
-# Test individual API
-curl "https://api.stlouisfed.org/fred/series/observations?series_id=UNRATE&api_key=$FRED_API_KEY&file_type=json&limit=1"
-```
-
-**Rate limit issues:**
-```bash
-# Check current limits
-curl http://localhost:8787/metrics
-
-# Adjust in .env
-RATE_LIMIT_MAX=1000
-```
-
-### Debug Mode
-
-Enable debug logging:
-```bash
-LOG_LEVEL=debug npm run server
-```
-
-### Getting Help
-
-1. Check logs: `docker-compose logs -f`
-2. Review configuration: `.env` file
-3. Test health endpoint: `curl http://localhost:8787/healthz`
-4. Check GitHub issues
-5. Review `IMPLEMENTATION_NOTES.md` for API details
 
 ---
 
 ## 📚 Additional Documentation
 
-- **API Details**: See `IMPLEMENTATION_NOTES.md` for external API specifics
+- **Methodology**: See `docs/pxi-methodology.md` for complete calculation details
+- **API Specifics**: See `IMPLEMENTATION_NOTES.md` for external API details
 - **Scheduling**: See `scheduler.md` for cron configuration
-- **Infrastructure**: See `cronjobs.yaml` and `timescaledb.yaml`
+- **Testing**: See test files in `tests/` directory
 
 ---
 
@@ -950,15 +681,24 @@ Private - All Rights Reserved
 
 ## 🎯 Roadmap
 
-- [ ] Add Prometheus metrics exporter
-- [ ] Implement WebSocket support for real-time updates
-- [ ] Add user authentication and API keys
-- [ ] Create admin dashboard
-- [ ] Add more financial metrics
-- [ ] Implement alerting system
-- [ ] Add data export functionality
-- [ ] Create mobile app
+### Completed ✅
+- [x] Phase 1: Core PXI calculation with statistical validation
+- [x] Phase 1.5: K-means regime detection
+- [x] Regime analytics dashboard
+- [x] Historical chart overlays
+- [x] Backtest engine with regime filtering
+- [x] Comprehensive validation framework
+- [x] PXI methodology documentation
+
+### Future Enhancements
+- [ ] Machine learning regime prediction
+- [ ] Real-time WebSocket updates
+- [ ] Multi-timeframe analysis (hourly, daily, weekly)
+- [ ] Additional clustering algorithms (DBSCAN, hierarchical)
+- [ ] Custom alert rules engine
+- [ ] Data export functionality (CSV, JSON)
+- [ ] Mobile app
 
 ---
 
-**Built with ❤️ using TypeScript, Fastify, Next.js, and TimescaleDB**
+**Built with ❤️ using TypeScript, Fastify, Next.js, TimescaleDB, and scikit-learn**
