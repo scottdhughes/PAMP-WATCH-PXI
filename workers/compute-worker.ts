@@ -372,8 +372,9 @@ async function computePXI(): Promise<void> {
     await insertAlerts(alertsToInsert);
 
     // 9. Also insert into legacy composite table for backward compatibility
-    // Convert composite PXI to 0-100 scale for display
-    const pxiDisplay = Math.max(0, Math.min(100, 50 + compositePxiValue * 12.5));
+    // Store the actual PXI value (not converted to 0-100 scale)
+    // The frontend will display the raw PXI value along with the regime
+    const pxiDisplay = compositePxiValue;
 
     await insertComposite({
       calculatedAt: timestamp,
