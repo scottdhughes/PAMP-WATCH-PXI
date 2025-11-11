@@ -46,6 +46,11 @@ export interface PXIMetricDefinition {
 }
 
 /**
+ * Health status type for validation
+ */
+export type HealthStatus = 'OK' | 'Outlier' | 'Flat' | 'Invalid' | 'Stale';
+
+/**
  * Metric row in API response
  */
 export interface MetricRow {
@@ -60,6 +65,9 @@ export interface MetricRow {
   zScore: number;
   contribution: number;
   breach: BreachStatus;
+  health?: HealthStatus;  // Data quality status
+  volatility?: number;     // Rolling volatility (%)
+  stability?: string;      // Stability rating
 }
 
 /**

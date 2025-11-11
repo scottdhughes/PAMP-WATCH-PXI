@@ -16,6 +16,7 @@
     "worker:indicators:daily": "tsx workers/daily-indicator-worker.ts",
     "worker:run": "npm run worker:ingest && npm run worker:compute",
     "scheduler": "tsx scheduler.ts",
+    "validate:data": "tsx scripts/validate-data.ts",
     "test": "vitest"
   },
   "dependencies": {
@@ -28,6 +29,7 @@
     "framer-motion": "12.23.24",
     "lodash": "4.17.21",
     "lodash.isequal": "4.5.0",
+    "mathjs": "15.1.0",
     "next": "14.2.3",
     "node-cron": "4.2.1",
     "pg": "^8.11.3",
@@ -39,6 +41,7 @@
     "react-gauge-chart": "0.5.1",
     "react-query": "3.39.3",
     "recharts": "3.4.1",
+    "simple-statistics": "7.8.8",
     "swr": "2.2.5",
     "technicalindicators": "3.1.0",
     "zod": "^3.22.4"

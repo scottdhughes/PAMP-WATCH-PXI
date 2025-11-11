@@ -171,6 +171,9 @@ server.get('/v1/pxi/metrics/latest', async (request, reply) => {
       contribution: metric.contribution,
       status: metric.breach || 'Unknown',
       unit: metric.unit || 'value',
+      health: metric.health,
+      volatility: metric.volatility,
+      stability: metric.stability,
     }));
 
     // Cache the metrics

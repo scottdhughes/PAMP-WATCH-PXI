@@ -298,6 +298,7 @@ export default function Dashboard() {
                   <th className="px-3 py-2 font-medium">z-Score</th>
                   <th className="px-3 py-2 font-medium">Contribution</th>
                   <th className="px-3 py-2 font-medium">Status</th>
+                  <th className="px-3 py-2 font-medium">Health</th>
                 </tr>
               </thead>
               <tbody>
@@ -337,6 +338,22 @@ export default function Dashboard() {
                       "text-red-400": m.status === 'Crisis'
                     })}>
                       {m.status}
+                    </td>
+                    <td className={clsx("px-3 py-3 text-xs font-semibold flex items-center gap-1", {
+                      "text-green-400": m.health === 'OK',
+                      "text-yellow-400": m.health === 'Stale',
+                      "text-orange-400": m.health === 'Outlier',
+                      "text-red-400": m.health === 'Invalid' || m.health === 'Flat',
+                      "text-slate-500": !m.health
+                    })}>
+                      <span className="inline-block w-2 h-2 rounded-full" style={{
+                        backgroundColor: m.health === 'OK' ? 'rgb(74, 222, 128)' :
+                                        m.health === 'Stale' ? 'rgb(250, 204, 21)' :
+                                        m.health === 'Outlier' ? 'rgb(251, 146, 60)' :
+                                        m.health === 'Invalid' || m.health === 'Flat' ? 'rgb(248, 113, 113)' :
+                                        'rgb(100, 116, 139)'
+                      }}></span>
+                      {m.health || 'Unknown'}
                     </td>
                   </tr>
                 ))}

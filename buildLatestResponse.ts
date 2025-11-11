@@ -1,4 +1,4 @@
-import { fetchLatestComposites, fetchLatestAlerts, fetchLatestRegime, fetchHistoricalMetricValue } from './db.js';
+import { fetchLatestComposites, fetchLatestAlerts, fetchLatestRegime, fetchHistoricalMetricValue, pool } from './db.js';
 import {
   classifyMetricState,
   pxiBands,
@@ -7,14 +7,42 @@ import {
   type PXIResponse,
   type Alert,
   type Regime,
+  type HealthStatus,
 } from './shared/index.js';
 import { logger } from './logger.js';
+import { sanityCheck, rollingVolatility, stabilityRating } from './validation.js';
+import type { PoolClient } from 'pg';
 
 const definitionMap = new Map(pxiMetricDefinitions.map((def) => [def.id, def]));
 
 // Constants for rolling delta calculations
 const LOOKBACK_7D = 7;
 const LOOKBACK_30D = 30;
+const VALIDATION_WINDOW = 30; // Days of data for validation
+
+/**
+ * Fetch historical time series for validation
+ */
+async function fetchValidationSeries(metricId: string, days: number): Promise<number[]> {
+  let client: PoolClient | null = null;
+  try {
+    client = await pool.connect();
+    const result = await client.query(
+      `SELECT value
+       FROM pxi_metric_samples
+       WHERE metric_id = $1
+         AND source_timestamp >= NOW() - INTERVAL '${days} days'
+       ORDER BY source_timestamp ASC`,
+      [metricId]
+    );
+    return result.rows.map((r) => r.value);
+  } catch (error) {
+    logger.error({ error, metricId }, 'Failed to fetch validation series');
+    return [];
+  } finally {
+    if (client) client.release();
+  }
+}
 
 /**
  * Calculate percentage change between current and historical value
@@ -42,18 +70,21 @@ export const buildLatestResponse = async (): Promise<PXIResponse | null> => {
   }
   const prevMap = new Map(previous?.metrics?.map((metric) => [metric.id, metric]) ?? []);
 
-  // Fetch historical values for all metrics in parallel for delta calculations
+  // Fetch historical values for all metrics in parallel for delta calculations and validation
   const historicalValues7D = new Map<string, number | null>();
   const historicalValues30D = new Map<string, number | null>();
+  const validationSeries = new Map<string, number[]>();
 
   await Promise.all(
     latest.metrics.map(async (metric) => {
-      const [value7D, value30D] = await Promise.all([
+      const [value7D, value30D, series] = await Promise.all([
         fetchHistoricalMetricValue(metric.id, LOOKBACK_7D),
         fetchHistoricalMetricValue(metric.id, LOOKBACK_30D),
+        fetchValidationSeries(metric.id, VALIDATION_WINDOW),
       ]);
       historicalValues7D.set(metric.id, value7D);
       historicalValues30D.set(metric.id, value30D);
+      validationSeries.set(metric.id, series);
     })
   );
 
@@ -79,6 +110,31 @@ export const buildLatestResponse = async (): Promise<PXIResponse | null> => {
       );
     }
 
+    // Run validation and health checks
+    const series = validationSeries.get(metric.id) || [];
+    const validation = sanityCheck(series, metric.id, 3, 5);
+    const volatility = rollingVolatility(series, 30);
+    const stability = stabilityRating(volatility);
+
+    // Determine health status
+    let health: HealthStatus = 'OK';
+    if (validation.isInvalid) {
+      health = 'Invalid';
+    } else if (validation.isFlat) {
+      health = 'Flat';
+    } else if (validation.isOutlier) {
+      health = 'Outlier';
+    } else if (series.length < 5) {
+      health = 'Stale';
+    }
+
+    if (health !== 'OK') {
+      logger.warn(
+        { metric: metric.id, health, reason: validation.reason, volatility, stability },
+        'Metric health check warning'
+      );
+    }
+
     const breach = classifyMetricState(metric.zScore);
     return {
       id: metric.id,
@@ -92,6 +148,9 @@ export const buildLatestResponse = async (): Promise<PXIResponse | null> => {
       zScore: metric.zScore,
       contribution: metric.contribution,
       breach,
+      health,
+      volatility: volatility ?? undefined,
+      stability,
     };
   });
 
