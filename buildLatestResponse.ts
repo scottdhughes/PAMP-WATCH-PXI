@@ -47,10 +47,32 @@ async function fetchValidationSeries(metricId: string, days: number): Promise<nu
 /**
  * Calculate percentage change between current and historical value
  * Returns null if historical value is missing or calculation is invalid
+ *
+ * Special handling for btcReturn: shows difference in percentage points
+ * instead of percentage change, since btcReturn is already a change metric
  */
-function calculatePercentageChange(currentValue: number, historicalValue: number | null): number | null {
-  if (historicalValue === null || historicalValue === 0 || !Number.isFinite(historicalValue)) {
+function calculatePercentageChange(currentValue: number, historicalValue: number | null, metricId: string): number | null {
+  if (historicalValue === null || !Number.isFinite(historicalValue)) {
     return null;
+  }
+
+  // Special case: btcReturn is already a percentage change metric
+  // Show the difference in percentage points, not percentage-of-percentage
+  if (metricId === 'btcReturn') {
+    // Convert to percentage points difference
+    // e.g., -2.79% - (+2.51%) = -5.30 percentage points
+    const delta = (currentValue - historicalValue) * 100;
+
+    if (!Number.isFinite(delta)) {
+      return null;
+    }
+
+    return delta;
+  }
+
+  // For all other metrics, use standard percentage change formula
+  if (historicalValue === 0) {
+    return null; // Avoid division by zero
   }
 
   const delta = ((currentValue - historicalValue) / Math.abs(historicalValue)) * 100;
@@ -100,8 +122,8 @@ export const buildLatestResponse = async (): Promise<PXIResponse | null> => {
     const value7D = historicalValues7D.get(metric.id) ?? null;
     const value30D = historicalValues30D.get(metric.id) ?? null;
 
-    const delta7D = calculatePercentageChange(metric.value, value7D);
-    const delta30D = calculatePercentageChange(metric.value, value30D);
+    const delta7D = calculatePercentageChange(metric.value, value7D, metric.id);
+    const delta30D = calculatePercentageChange(metric.value, value30D, metric.id);
 
     if (delta7D !== null || delta30D !== null) {
       logger.debug(
