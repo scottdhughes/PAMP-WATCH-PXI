@@ -163,6 +163,8 @@ server.get('/v1/pxi/metrics/latest', async (request, reply) => {
       label: metric.label,
       value: metric.value,
       delta: metric.delta || 0,
+      delta7D: metric.delta7D,
+      delta30D: metric.delta30D,
       lower: metric.lower,
       upper: metric.upper,
       zScore: metric.zScore,
