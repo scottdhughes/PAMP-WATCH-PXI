@@ -181,21 +181,30 @@ async function computePXI(): Promise<void> {
       }
 
       // Use pre-calculated z-score from database if available
-      // Fall back to calculating from historical stats for backward compatibility
+      // Fall back to calculating from 90-day stats for metrics with sparse data
       let zScore: number;
 
       if (sample.zScore !== undefined && sample.zScore !== null && isFinite(sample.zScore)) {
         // Use stored z-score (calculated during ingestion with rolling 90-day window)
         zScore = sample.zScore;
-        logger.debug({ metricId: def.id, zScore: zScore.toFixed(3) }, 'Using stored z-score');
+        logger.debug({ metricId: def.id, zScore: zScore.toFixed(3) }, 'Using stored 90-day z-score');
       } else {
-        // Fall back to calculating from historical stats
+        // Fall back to calculating from 90-day stats (latest_stats table)
+        // Skip if insufficient data (null stddev or < 5 samples)
+        if (!stats.stddev || stats.sampleCount < 5) {
+          logger.warn(
+            { metricId: def.id, sampleCount: stats.sampleCount },
+            'Skipping metric - insufficient 90-day data for z-score calculation'
+          );
+          continue;
+        }
+
         zScore = calculateStatisticalZScore(
           sample.value,
           stats.mean,
           stats.stddev,
         );
-        logger.debug({ metricId: def.id, zScore: zScore.toFixed(3) }, 'Calculated z-score from historical stats');
+        logger.debug({ metricId: def.id, zScore: zScore.toFixed(3) }, 'Calculated z-score from 90-day stats');
       }
 
       // Apply dynamic weighting

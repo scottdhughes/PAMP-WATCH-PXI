@@ -407,9 +407,9 @@ export default function Dashboard() {
           <h3 className="text-slate-400 text-sm mb-4 tracking-wide uppercase">
             Underlying PXI Metrics
           </h3>
-          <div className="grid grid-cols-2 md:grid-cols-5 lg:grid-cols-10 gap-y-6 gap-x-4 text-sm text-slate-300">
+          <div className="flex flex-wrap justify-center gap-y-6 gap-x-8 text-sm text-slate-300">
             {metrics.map((m: any) => (
-              <div key={m.id} className="flex flex-col items-center">
+              <div key={m.id} className="flex flex-col items-center w-20">
                 <p className="text-slate-500 text-xs mb-1 text-center">{m.label}</p>
                 <p className={clsx("font-semibold text-base font-mono", {
                   "text-green-400": Math.abs(m.zScore) < 0.5,
