@@ -556,7 +556,7 @@ export default function Dashboard() {
           <span className="text-slate-400 font-mono">{maxDrawdown.toFixed(2)}σ</span>
           <span className="text-slate-800">·</span>
           <span className="text-slate-600">Volatility</span>
-          <span className="text-slate-400 font-mono">{(volatility / 100).toFixed(2)}%</span>
+          <span className="text-slate-400 font-mono">{volatility.toFixed(2)}σ</span>
         </div>
       </section>
 

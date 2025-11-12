@@ -98,7 +98,7 @@ export function calculateMaxDrawdown(values: number[]): {
 }
 
 /**
- * Calculate annualized volatility
+ * Calculate annualized volatility (percentage-based)
  *
  * @param returns - Array of daily returns
  * @returns Annualized volatility (standard deviation)
@@ -112,6 +112,27 @@ export function calculateVolatility(returns: number[]): number {
   const stddev = Math.sqrt(variance);
 
   // Annualize: multiply by sqrt(252) for daily returns
+  return stddev * Math.sqrt(252);
+}
+
+/**
+ * Calculate absolute volatility (for normalized indices like PXI)
+ *
+ * For z-score based indices, absolute volatility is more meaningful than
+ * percentage-based volatility, as it measures variation in σ units.
+ *
+ * @param values - Array of PXI values (z-scores)
+ * @returns Annualized absolute volatility in σ units
+ */
+export function calculateAbsoluteVolatility(values: number[]): number {
+  if (!values.length) return 0;
+
+  const mean = values.reduce((a, b) => a + b, 0) / values.length;
+  const variance =
+    values.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / values.length;
+  const stddev = Math.sqrt(variance);
+
+  // Annualize: multiply by sqrt(252) for daily observations
   return stddev * Math.sqrt(252);
 }
 

@@ -9,6 +9,7 @@ import {
   calculateSharpeRatio,
   calculateMaxDrawdown,
   calculateVolatility,
+  calculateAbsoluteVolatility,
   calculateCumulativeReturn,
   calculateSortinoRatio,
 } from './utils/analytics.js';
@@ -400,7 +401,7 @@ server.get('/v1/pxi/analytics/risk-metrics', async (request, reply) => {
     const sharpe = calculateSharpeRatio(returns, 0.02);
     const sortino = calculateSortinoRatio(returns, 0.02);
     const drawdown = calculateMaxDrawdown(pxiValues);
-    const volatility = calculateVolatility(returns);
+    const volatility = calculateAbsoluteVolatility(pxiValues); // Use absolute volatility for PXI (σ units)
     const cumulativeReturn = calculateCumulativeReturn(returns);
 
     const result = {
@@ -412,7 +413,7 @@ server.get('/v1/pxi/analytics/risk-metrics', async (request, reply) => {
         peakTimestamp: pxiHistory[drawdown.peakIndex]?.timestamp,
         troughTimestamp: pxiHistory[drawdown.troughIndex]?.timestamp,
       },
-      volatility: Number((volatility * 100).toFixed(2)), // Convert to percentage
+      volatility: Number(volatility.toFixed(2)), // Absolute volatility in σ units
       cumulativeReturn: Number((cumulativeReturn * 100).toFixed(2)), // Convert to percentage
       daysAnalyzed: returns.length,
     };
