@@ -6,7 +6,7 @@ A TypeScript-based platform that aggregates macro/market data from multiple fina
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.4-blue.svg)](https://www.typescriptlang.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-20-green.svg)](https://nodejs.org/)
-[![License](https://img.shields.io/badge/license-Private-red.svg)]()
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 ---
 
@@ -154,7 +154,7 @@ PAMP-WATCH-PXI/
 │
 ├── utils/                        # Utility functions
 │   ├── fetcher.ts               # API fetch utility for React Query
-│   └── analytics.ts             # Risk metrics (Sharpe, Sortino, drawdown)
+│   └── analytics.ts             # Risk metrics (Sharpe, Sortino, drawdown, absolute volatility)
 │
 ├── hooks/                        # React hooks
 │   └── useDashboardSnapshot.ts  # Dashboard polling hook
@@ -480,7 +480,7 @@ Run backtest with regime filtering DSL.
 Historical PXI data for charting.
 
 #### `GET /v1/pxi/analytics/risk-metrics`
-Comprehensive risk analytics (Sharpe, Sortino, max drawdown, volatility).
+Comprehensive risk analytics (Sharpe, Sortino, max drawdown, volatility in σ units).
 
 #### `GET /healthz`
 Health check with database connectivity test.
@@ -675,7 +675,9 @@ psql $DATABASE_URL -c "\dt"
 
 ## 📄 License
 
-Private - All Rights Reserved
+MIT License - Copyright (c) 2025 Scott D. Hughes
+
+See [LICENSE](LICENSE) file for details.
 
 ---
 
