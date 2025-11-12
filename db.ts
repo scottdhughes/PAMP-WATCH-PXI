@@ -47,13 +47,47 @@ export const testConnection = async (): Promise<boolean> => {
 /**
  * Calculate z-score for a metric value given historical data
  */
-const calculateZScore = (value: number, historicalValues: number[]): number | null => {
-  if (historicalValues.length < 5) {
-    return null; // Not enough data for meaningful statistics
+/**
+ * Resample time series data to daily frequency (last value per day)
+ * This ensures all metrics are comparable regardless of their native update frequency
+ * (e.g., BTC updates minutely, VIX updates daily, NFCI updates monthly)
+ */
+const resampleToDaily = (data: Array<{ value: number; timestamp: Date }>): number[] => {
+  // Group by date (YYYY-MM-DD)
+  const dailyMap = new Map<string, { value: number; timestamp: Date }>();
+
+  for (const point of data) {
+    const dateKey = point.timestamp.toISOString().split('T')[0]; // YYYY-MM-DD
+    const existing = dailyMap.get(dateKey);
+
+    // Keep the latest value for each day (market close)
+    if (!existing || point.timestamp > existing.timestamp) {
+      dailyMap.set(dateKey, point);
+    }
   }
 
-  const μ = mean(historicalValues) as number;
-  const σ = std(historicalValues, 'unbiased') as number;
+  // Extract values in chronological order
+  const sortedDates = Array.from(dailyMap.keys()).sort();
+  return sortedDates.map(date => dailyMap.get(date)!.value);
+};
+
+/**
+ * Calculate z-score from daily-resampled historical data
+ * Uses rolling 90-day window with daily frequency normalization
+ */
+const calculateZScore = (
+  value: number,
+  historicalData: Array<{ value: number; timestamp: Date }>
+): number | null => {
+  // Resample to daily frequency first
+  const dailyValues = resampleToDaily(historicalData);
+
+  if (dailyValues.length < 5) {
+    return null; // Not enough daily data for meaningful statistics
+  }
+
+  const μ = mean(dailyValues) as number;
+  const σ = std(dailyValues, 'unbiased') as number;
 
   // Handle flatline data (zero standard deviation)
   if (σ < 1e-9) {
@@ -149,9 +183,9 @@ export const upsertMetricSamples = async (
         windowStart.setDate(windowStart.getDate() - 90);
 
         // Filter historical data to rolling window BEFORE sample timestamp
+        // Pass full { value, timestamp } objects for daily resampling
         const relevantHistory = historicalData
-          .filter((h) => h.timestamp >= windowStart && h.timestamp < sampleTimestamp)
-          .map((h) => h.value);
+          .filter((h) => h.timestamp >= windowStart && h.timestamp < sampleTimestamp);
 
         const zScore = calculateZScore(sample.value, relevantHistory);
 
@@ -161,6 +195,14 @@ export const upsertMetricSamples = async (
             timestamp: sample.sourceTimestamp,
             zScore,
           });
+
+          logger.debug({
+            metricId,
+            sampleTimestamp: sample.sourceTimestamp,
+            rawDataPoints: relevantHistory.length,
+            dailyDataPoints: resampleToDaily(relevantHistory).length,
+            zScore: zScore.toFixed(3),
+          }, 'Z-score calculated with daily resampling');
         }
       }
     }

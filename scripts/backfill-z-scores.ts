@@ -26,18 +26,44 @@ interface MetricDataPoint {
 }
 
 /**
- * Calculate z-score for a value given historical series
+ * Resample time series data to daily frequency (last value per day)
+ * This ensures all metrics are comparable regardless of their native update frequency
+ */
+function resampleToDaily(data: Array<{ value: number; timestamp: Date }>): number[] {
+  // Group by date (YYYY-MM-DD)
+  const dailyMap = new Map<string, { value: number; timestamp: Date }>();
+
+  for (const point of data) {
+    const dateKey = point.timestamp.toISOString().split('T')[0]; // YYYY-MM-DD
+    const existing = dailyMap.get(dateKey);
+
+    // Keep the latest value for each day (market close)
+    if (!existing || point.timestamp > existing.timestamp) {
+      dailyMap.set(dateKey, point);
+    }
+  }
+
+  // Extract values in chronological order
+  const sortedDates = Array.from(dailyMap.keys()).sort();
+  return sortedDates.map(date => dailyMap.get(date)!.value);
+}
+
+/**
+ * Calculate z-score for a value given historical series with daily resampling
  */
 function calculateZScore(
   currentValue: number,
-  historicalValues: number[]
+  historicalData: Array<{ value: number; timestamp: Date }>
 ): number | null {
-  if (historicalValues.length < MIN_SAMPLES_FOR_Z_SCORE) {
-    return null; // Not enough data for meaningful statistics
+  // Resample to daily frequency first
+  const dailyValues = resampleToDaily(historicalData);
+
+  if (dailyValues.length < MIN_SAMPLES_FOR_Z_SCORE) {
+    return null; // Not enough daily data for meaningful statistics
   }
 
-  const μ = mean(historicalValues) as number;
-  const σ = std(historicalValues, 'unbiased') as number;
+  const μ = mean(dailyValues) as number;
+  const σ = std(dailyValues, 'unbiased') as number;
 
   // Handle flatline data (zero standard deviation)
   if (σ < 1e-9) {
@@ -161,17 +187,21 @@ async function processMetric(metricId: string, label: string): Promise<void> {
     const windowStart = new Date(currentTimestamp);
     windowStart.setDate(windowStart.getDate() - ROLLING_WINDOW_DAYS);
 
-    // Collect all values within the rolling window (excluding current point)
-    const windowValues: number[] = [];
+    // Collect all data within the rolling window (excluding current point)
+    // Pass full { value, timestamp } objects for daily resampling
+    const windowData: Array<{ value: number; timestamp: Date }> = [];
     for (let j = 0; j < i; j++) {
       const pointTimestamp = new Date(dataPoints[j].sourceTimestamp);
       if (pointTimestamp >= windowStart && pointTimestamp < currentTimestamp) {
-        windowValues.push(dataPoints[j].value);
+        windowData.push({
+          value: dataPoints[j].value,
+          timestamp: pointTimestamp,
+        });
       }
     }
 
-    // Calculate z-score
-    const zScore = calculateZScore(currentPoint.value, windowValues);
+    // Calculate z-score with daily resampling
+    const zScore = calculateZScore(currentPoint.value, windowData);
 
     if (zScore !== null) {
       updates.push({
