@@ -3,7 +3,7 @@
 import React from 'react';
 import { useQuery } from 'react-query';
 import { fetcher } from '@/utils/fetcher';
-import { ScatterChart, Scatter, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid, Legend, Cell } from 'recharts';
+import { ScatterChart, Scatter, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid, Legend, Cell, BarChart, Bar } from 'recharts';
 import Link from 'next/link';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8787';
@@ -21,6 +21,13 @@ export default function RegimeAnalyticsPage() {
     'regime-analytics',
     () => fetcher<any>(`${API_BASE}/v1/pxi/regime/history?days=90`),
     { refetchInterval: 60000 }
+  );
+
+  // Fetch LSTM forecasts
+  const { data: forecastData } = useQuery(
+    'pxi-forecasts-regime',
+    () => fetcher<any>(`${API_BASE}/v1/pxi/forecasts?method=lstm&horizon=7`),
+    { refetchInterval: 300000 }
   );
 
   const regimes = regimeData?.regimes || [];
@@ -283,6 +290,82 @@ export default function RegimeAnalyticsPage() {
             })}
           </div>
         </section>
+
+        {/* LSTM Forecast Section */}
+        {forecastData?.forecasts && forecastData.forecasts.length > 0 && (
+          <section className="mb-12">
+            <h2 className="text-xl font-semibold mb-4 text-slate-300">7-Day Regime Forecast (LSTM)</h2>
+            <div className="bg-slate-950 rounded-lg border border-slate-900 p-4 md:p-6">
+              {/* Forecast timeline */}
+              <div className="grid grid-cols-1 md:grid-cols-7 gap-2 mb-6">
+                {forecastData.forecasts.map((f: any, idx: number) => {
+                  const forecastDate = new Date();
+                  forecastDate.setDate(forecastDate.getDate() + f.day);
+
+                  return (
+                    <div
+                      key={idx}
+                      className="bg-slate-900/50 rounded-lg p-3 border border-slate-800"
+                      style={{
+                        borderColor: REGIME_COLORS[f.predictedRegime] ? `${REGIME_COLORS[f.predictedRegime]}40` : '#1e293b',
+                      }}
+                    >
+                      <div className="text-[10px] text-slate-500 mb-1">
+                        {forecastDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      </div>
+                      <div
+                        className="text-sm font-semibold mb-1"
+                        style={{ color: REGIME_COLORS[f.predictedRegime] || '#94a3b8' }}
+                      >
+                        {f.predictedRegime}
+                      </div>
+                      <div className="text-xs text-slate-400 font-mono">
+                        PXI: {f.predictedPxi.toFixed(3)}
+                      </div>
+                      <div className="text-[10px] text-slate-500 mt-1">
+                        {(f.confidence * 100).toFixed(0)}% conf
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Regime distribution summary */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {['Calm', 'Normal', 'Stress'].map((regime) => {
+                  const count = forecastData.forecasts.filter((f: any) => f.predictedRegime === regime).length;
+                  const percentage = (count / forecastData.forecasts.length) * 100;
+
+                  return (
+                    <div key={regime} className="bg-slate-900/30 rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-semibold" style={{ color: REGIME_COLORS[regime] }}>
+                          {regime}
+                        </span>
+                        <span className="text-xs text-slate-400 font-mono">{count}/7 days</span>
+                      </div>
+                      <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
+                        <div
+                          className="h-full transition-all duration-300"
+                          style={{
+                            width: `${percentage}%`,
+                            backgroundColor: REGIME_COLORS[regime],
+                          }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Model info */}
+              <div className="mt-6 text-center text-xs text-slate-500">
+                <p>LSTM Deep Learning Model (2 layers, 64 units) • Trained on {forecastData.daysAnalyzed || 'N/A'} days of historical data</p>
+                <p className="mt-1">Generated: {new Date(forecastData.timestamp).toLocaleString()}</p>
+              </div>
+            </div>
+          </section>
+        )}
 
         {/* Footer */}
         <div className="text-center text-slate-600 text-xs">

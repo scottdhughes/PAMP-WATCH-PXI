@@ -4,7 +4,7 @@ import rateLimit from '@fastify/rate-limit';
 import { buildLatestResponse } from './buildLatestResponse.js';
 import { logger } from './logger.js';
 import { config } from './config.js';
-import { pool, testConnection, getPXIHistory, fetchLatestIndicators } from './db.js';
+import { pool, testConnection, getPXIHistory, fetchLatestIndicators, fetchLatestForecasts } from './db.js';
 import {
   calculateSharpeRatio,
   calculateMaxDrawdown,
@@ -707,6 +707,49 @@ server.get('/v1/pxi/regime/history', async (request, reply) => {
     return reply.code(500).send({
       error: 'Internal server error',
       message: 'Failed to fetch regime history',
+    });
+  }
+});
+
+/**
+ * GET /v1/pxi/forecasts
+ * Fetch latest regime forecasts for UI visualization
+ */
+server.get('/v1/pxi/forecasts', async (request, reply) => {
+  try {
+    // Parse query parameters
+    const { method = 'lstm', horizon = '7' } = request.query as { method?: string; horizon?: string };
+    const horizonInt = Math.min(Math.max(parseInt(horizon, 10) || 7, 1), 30);
+
+    // Validate method parameter
+    const validMethods = ['lstm', 'statistical', 'all'];
+    const forecastMethod = validMethods.includes(method) ? method : 'lstm';
+
+    // Check cache first
+    const cacheKey = `pxi:forecasts:${forecastMethod}:${horizonInt}`;
+    if (config.cacheEnabled) {
+      const cached = getFromCache<any>(cacheKey);
+      if (cached) {
+        reply.header('X-Cache', 'HIT');
+        return cached;
+      }
+    }
+
+    // Fetch forecasts from database
+    const data = await fetchLatestForecasts(forecastMethod, horizonInt);
+
+    // Cache the response (shorter TTL for forecasts)
+    if (config.cacheEnabled) {
+      setInCache(cacheKey, data, 60); // 60 second cache
+      reply.header('X-Cache', 'MISS');
+    }
+
+    return data;
+  } catch (error) {
+    logger.error({ error, reqId: request.id }, 'Failed to fetch forecasts');
+    return reply.code(500).send({
+      error: 'Internal server error',
+      message: 'Failed to fetch forecasts',
     });
   }
 });

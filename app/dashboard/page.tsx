@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { useQuery } from 'react-query';
 import { fetcher } from '@/utils/fetcher';
 import { motion, AnimatePresence } from 'framer-motion';
-import { LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip, ReferenceArea } from 'recharts';
+import { LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip, ReferenceArea, AreaChart, Area, Legend } from 'recharts';
 import clsx from 'clsx';
 import { useDashboardSnapshot } from '@/hooks/useDashboardSnapshot';
 import { StaleIndicator } from '@/components/StaleIndicator';
@@ -113,6 +113,13 @@ export default function Dashboard() {
     'regime-history',
     () => fetcher<any>(`${API_BASE}/v1/pxi/regime/history?days=30`),
     { refetchInterval: 60000 }
+  );
+
+  // Fetch LSTM forecasts
+  const { data: forecastData } = useQuery(
+    'pxi-forecasts',
+    () => fetcher<any>(`${API_BASE}/v1/pxi/forecasts?method=lstm&horizon=7`),
+    { refetchInterval: 300000 } // 5 min refresh
   );
 
   // Expanded state for System Internals
@@ -642,6 +649,125 @@ export default function Dashboard() {
                 </div>
               </div>
             )}
+          </div>
+        </section>
+      )}
+
+      {/* LSTM Forecast Section */}
+      {forecastData?.forecasts && forecastData.forecasts.length > 0 && (
+        <section className="w-full max-w-5xl mb-8 md:mb-12 px-4 mt-8">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-slate-500 text-xs md:text-sm text-center flex-1 tracking-wide">
+              7-Day LSTM Regime Forecast
+            </h3>
+            <div className="text-[10px] px-3 py-1 rounded-full border bg-purple-500/10 border-purple-500/50 text-purple-400">
+              Deep Learning
+            </div>
+          </div>
+          <div className="bg-slate-950 rounded-lg p-2 md:p-4 border border-slate-900">
+            <ResponsiveContainer width="100%" height={240}>
+              <LineChart
+                data={React.useMemo(() => {
+                  const forecasts = forecastData.forecasts || [];
+                  const lastHistoricalPoint = chartData[chartData.length - 1];
+
+                  // Create forecast data points starting from tomorrow
+                  return forecasts.map((f: any, idx: number) => {
+                    const forecastDate = new Date();
+                    forecastDate.setDate(forecastDate.getDate() + f.day);
+                    forecastDate.setHours(12, 0, 0, 0);
+
+                    return {
+                      timestamp: forecastDate.getTime(),
+                      predicted: f.predictedPxi,
+                      ciLower: f.ciLower,
+                      ciUpper: f.ciUpper,
+                      confidence: f.confidence,
+                      regime: f.predictedRegime,
+                      day: f.day,
+                    };
+                  });
+                }, [forecastData, chartData])}
+              >
+                <XAxis
+                  dataKey="timestamp"
+                  stroke="#334155"
+                  tick={{ fill: '#64748b', fontSize: 10 }}
+                  tickFormatter={(value) => new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                />
+                <YAxis
+                  stroke="#334155"
+                  tick={{ fill: '#64748b', fontSize: 10 }}
+                  domain={['auto', 'auto']}
+                />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: '#0f172a',
+                    border: '1px solid #334155',
+                    borderRadius: '8px',
+                    fontSize: '12px'
+                  }}
+                  labelFormatter={(value) => `Day +${forecastData.forecasts.find((f: any) => {
+                    const d = new Date();
+                    d.setDate(d.getDate() + f.day);
+                    d.setHours(12, 0, 0, 0);
+                    return d.getTime() === value;
+                  })?.day || ''}`}
+                  formatter={(value: any, name: string) => {
+                    if (name === 'predicted') return [value.toFixed(3), 'Predicted PXI'];
+                    if (name === 'ciLower') return [value.toFixed(3), 'Lower CI'];
+                    if (name === 'ciUpper') return [value.toFixed(3), 'Upper CI'];
+                    return [value, name];
+                  }}
+                />
+                {/* Confidence interval area */}
+                <Area
+                  type="monotone"
+                  dataKey="ciUpper"
+                  stroke="none"
+                  fill="#a78bfa"
+                  fillOpacity={0.1}
+                  activeDot={false}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="ciLower"
+                  stroke="none"
+                  fill="#a78bfa"
+                  fillOpacity={0.1}
+                  activeDot={false}
+                />
+                {/* Predicted PXI line */}
+                <Line
+                  type="monotone"
+                  dataKey="predicted"
+                  stroke="#a78bfa"
+                  strokeWidth={2}
+                  strokeDasharray="5 5"
+                  dot={{ r: 3, fill: '#a78bfa', strokeWidth: 0 }}
+                  activeDot={{ r: 5 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+            {/* Forecast summary */}
+            <div className="mt-4 flex flex-wrap items-center justify-center gap-4 text-xs">
+              <div className="flex items-center gap-2">
+                <span className="text-slate-500">Avg Predicted PXI:</span>
+                <span className="text-purple-400 font-mono">
+                  {(forecastData.forecasts.reduce((sum: number, f: any) => sum + f.predictedPxi, 0) / forecastData.forecasts.length).toFixed(3)}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-slate-500">Avg Confidence:</span>
+                <span className="text-purple-400 font-mono">
+                  {(forecastData.forecasts.reduce((sum: number, f: any) => sum + f.confidence, 0) / forecastData.forecasts.length * 100).toFixed(0)}%
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-slate-500">Model:</span>
+                <span className="text-slate-400 text-[10px]">LSTM (2 layers, 64 units)</span>
+              </div>
+            </div>
           </div>
         </section>
       )}

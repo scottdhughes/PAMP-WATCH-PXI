@@ -1220,6 +1220,108 @@ export const storeForecast = async (
 };
 
 /**
+ * Fetch latest forecasts for UI visualization
+ *
+ * @param method - Forecasting method ('lstm', 'statistical', or 'all')
+ * @param horizon - Number of days ahead (default: 7)
+ * @returns Array of forecast objects with historical context
+ */
+export const fetchLatestForecasts = async (
+  method: string = 'lstm',
+  horizon: number = 7
+): Promise<{
+  forecasts: Array<{
+    day: number;
+    predictedPxi: number;
+    predictedRegime: string;
+    confidence: number;
+    ciLower: number;
+    ciUpper: number;
+    forecastDate: string;
+  }>;
+  method: string;
+  createdAt: string;
+}> => {
+  let client: PoolClient | null = null;
+  try {
+    client = await pool.connect();
+
+    // Get most recent forecast run
+    const query =
+      method === 'all'
+        ? `SELECT
+             forecast_date,
+             horizon_days,
+             predicted_pxi,
+             predicted_regime,
+             confidence,
+             ci_lower,
+             ci_upper,
+             method,
+             created_at
+           FROM pxi_forecasts
+           WHERE created_at = (SELECT MAX(created_at) FROM pxi_forecasts)
+             AND horizon_days <= $1
+           ORDER BY horizon_days ASC`
+        : `SELECT
+             forecast_date,
+             horizon_days,
+             predicted_pxi,
+             predicted_regime,
+             confidence,
+             ci_lower,
+             ci_upper,
+             method,
+             created_at
+           FROM pxi_forecasts
+           WHERE method = $2
+             AND created_at = (SELECT MAX(created_at) FROM pxi_forecasts WHERE method = $2)
+             AND horizon_days <= $1
+           ORDER BY horizon_days ASC`;
+
+    const params = method === 'all' ? [horizon] : [horizon, method];
+    const result = await client.query(query, params);
+
+    if (result.rows.length === 0) {
+      logger.warn({ method, horizon }, 'No forecasts found');
+      return {
+        forecasts: [],
+        method,
+        createdAt: new Date().toISOString(),
+      };
+    }
+
+    const forecasts = result.rows.map((row) => ({
+      day: row.horizon_days,
+      predictedPxi: parseFloat(row.predicted_pxi),
+      predictedRegime: row.predicted_regime,
+      confidence: parseFloat(row.confidence),
+      ciLower: parseFloat(row.ci_lower),
+      ciUpper: parseFloat(row.ci_upper),
+      forecastDate: row.forecast_date,
+    }));
+
+    logger.info(
+      { method, forecastCount: forecasts.length },
+      'Fetched latest forecasts for UI'
+    );
+
+    return {
+      forecasts,
+      method: result.rows[0].method,
+      createdAt: result.rows[0].created_at,
+    };
+  } catch (error) {
+    logger.error({ error, method, horizon }, 'Failed to fetch latest forecasts');
+    throw error;
+  } finally {
+    if (client) {
+      client.release();
+    }
+  }
+};
+
+/**
  * Gracefully closes the database pool
  */
 export const closePool = async (): Promise<void> => {
