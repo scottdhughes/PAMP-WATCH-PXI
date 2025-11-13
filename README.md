@@ -55,6 +55,13 @@ A TypeScript-based platform that aggregates macro/market data from multiple fina
 - ✅ **Dashboard Enhancements**: Δ7D and Δ30D delta displays with color coding
 - ✅ **Acceptance Criteria**: Z-score ≤1e-6, composite ≤0.001, correlation checks
 
+### Data Quality & Accuracy Enhancements
+- ✅ **Sparse Data Forward-Fill**: Automatic forward-filling for metrics with <50% daily coverage (e.g., U-3 unemployment)
+- ✅ **BTC 3-Day MA Smoothing**: Reduces cryptocurrency volatility noise with 3-day moving average on daily returns
+- ✅ **Auto-Refresh Stale Cache**: Automatically refreshes BTC technical indicators when cache exceeds 48 hours
+- ✅ **Contribution Cap**: Configurable 25% max contribution per metric prevents single-metric dominance (via `MAX_METRIC_CONTRIBUTION` env var)
+- ✅ **Weight Redistribution**: Excess weight from capped metrics redistributed proportionally to non-capped metrics
+
 ### Production Features
 - ✅ **Error Handling**: Comprehensive error handling with retry logic and exponential backoff
 - ✅ **Rate Limiting**: 100 req/min default with configurable limits
@@ -215,6 +222,16 @@ FRED_API_KEY=your_fred_api_key
 ALPHA_VANTAGE_API_KEY=your_alphavantage_key
 TWELVEDATA_API_KEY=your_twelvedata_key
 DATABASE_URL=postgresql://pxi:password@localhost:5432/pxi
+```
+
+**Optional configuration:**
+```env
+# Data Quality Settings
+MAX_METRIC_CONTRIBUTION=0.25    # Max 25% contribution per metric (prevents dominance)
+
+# Rate Limiting
+RATE_LIMIT_MAX=100              # Max requests per window
+RATE_LIMIT_WINDOW=1 minute      # Time window for rate limiting
 ```
 
 ### 3. Start Database
@@ -691,6 +708,11 @@ See [LICENSE](LICENSE) file for details.
 - [x] Backtest engine with regime filtering
 - [x] Comprehensive validation framework
 - [x] PXI methodology documentation
+- [x] **Phase 2: Data Quality Enhancements** (November 2025)
+  - [x] Sparse data forward-fill (U-3 unemployment)
+  - [x] 3-day MA smoothing for BTC returns
+  - [x] Auto-refresh stale BTC cache (>48 hours)
+  - [x] Configurable 25% contribution cap with redistribution
 
 ### Future Enhancements
 - [ ] Machine learning regime prediction
@@ -700,6 +722,9 @@ See [LICENSE](LICENSE) file for details.
 - [ ] Custom alert rules engine
 - [ ] Data export functionality (CSV, JSON)
 - [ ] Mobile app
+- [ ] Correlation alerts for diverging metrics
+- [ ] FRED response caching
+- [ ] Auto-suggest bound adjustments (10% deviation alerts)
 
 ---
 

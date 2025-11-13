@@ -51,8 +51,13 @@ export const testConnection = async (): Promise<boolean> => {
  * Resample time series data to daily frequency (last value per day)
  * This ensures all metrics are comparable regardless of their native update frequency
  * (e.g., BTC updates minutely, VIX updates daily, NFCI updates monthly)
+ *
+ * For sparse metrics (e.g., U-3 unemployment reported monthly), forward-fills
+ * missing days to reduce lag in z-score calculations.
  */
 const resampleToDaily = (data: Array<{ value: number; timestamp: Date }>): number[] => {
+  if (data.length === 0) return [];
+
   // Group by date (YYYY-MM-DD)
   const dailyMap = new Map<string, { value: number; timestamp: Date }>();
 
@@ -66,9 +71,46 @@ const resampleToDaily = (data: Array<{ value: number; timestamp: Date }>): numbe
     }
   }
 
-  // Extract values in chronological order
+  // Extract dates in chronological order
   const sortedDates = Array.from(dailyMap.keys()).sort();
-  return sortedDates.map(date => dailyMap.get(date)!.value);
+
+  // Check if data is sparse (< 50% of days covered in range)
+  const startDate = new Date(sortedDates[0]);
+  const endDate = new Date(sortedDates[sortedDates.length - 1]);
+  const daySpan = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+  const isSparse = sortedDates.length < (daySpan * 0.5);
+
+  if (!isSparse || daySpan <= 1) {
+    // Not sparse or single day - return as-is
+    return sortedDates.map(date => dailyMap.get(date)!.value);
+  }
+
+  // Forward-fill missing days for sparse metrics
+  logger.debug({
+    dataPoints: sortedDates.length,
+    daySpan,
+    coverage: ((sortedDates.length / daySpan) * 100).toFixed(1) + '%',
+  }, 'Applying forward-fill for sparse metric');
+
+  const filledValues: number[] = [];
+  let currentValue = dailyMap.get(sortedDates[0])!.value;
+
+  // Iterate through each day in the range
+  const currentDate = new Date(startDate);
+  while (currentDate <= endDate) {
+    const dateKey = currentDate.toISOString().split('T')[0];
+    const dataPoint = dailyMap.get(dateKey);
+
+    if (dataPoint) {
+      // Update current value when new data is available
+      currentValue = dataPoint.value;
+    }
+
+    filledValues.push(currentValue);
+    currentDate.setDate(currentDate.getDate() + 1);
+  }
+
+  return filledValues;
 };
 
 /**
@@ -517,16 +559,17 @@ export const insertCompositePxiRegime = async (composite: {
   totalWeight: number;
   pampCount: number;
   stressCount: number;
+  rawPxiValue?: number; // Full precision value before clamping
 }): Promise<void> => {
   let client: PoolClient | null = null;
   try {
     client = await pool.connect();
     await client.query(
       `INSERT INTO composite_pxi_regime
-        (timestamp, pxi_value, pxi_z_score, regime, total_weight, pamp_count, stress_count)
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
+        (timestamp, pxi_value, pxi_z_score, regime, total_weight, pamp_count, stress_count, raw_pxi_value)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
       ON CONFLICT (timestamp)
-      DO UPDATE SET pxi_value = EXCLUDED.pxi_value, regime = EXCLUDED.regime`,
+      DO UPDATE SET pxi_value = EXCLUDED.pxi_value, regime = EXCLUDED.regime, raw_pxi_value = EXCLUDED.raw_pxi_value`,
       [
         composite.timestamp,
         composite.pxiValue,
@@ -535,6 +578,7 @@ export const insertCompositePxiRegime = async (composite: {
         composite.totalWeight,
         composite.pampCount,
         composite.stressCount,
+        composite.rawPxiValue ?? composite.pxiValue, // Fallback to clamped value if raw not provided
       ],
     );
     logger.info({ regime: composite.regime, pxi: composite.pxiValue }, 'Composite PXI regime inserted');

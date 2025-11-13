@@ -80,4 +80,7 @@ export const config = {
   // Rate Limiting
   rateLimitMax: Number(process.env.RATE_LIMIT_MAX ?? 100),
   rateLimitWindow: process.env.RATE_LIMIT_WINDOW ?? '1 minute',
+
+  // PXI Computation
+  maxMetricContribution: Number(process.env.MAX_METRIC_CONTRIBUTION ?? 0.25), // Default 25% cap
 };

@@ -5,12 +5,17 @@
  * Continuously ingests all 7 metrics and computes PXI every minute:
  * - HY OAS, IG OAS, VIX, U3, USD, NFCI, BTC Returns
  *
- * Also runs nightly data validation at 2 AM:
+ * Runs BTC technical indicators twice daily at 00:05 and 12:05 UTC:
+ * - RSI (Relative Strength Index)
+ * - MACD (Moving Average Convergence Divergence)
+ * - Signal multiplier for PXI adjustment
+ *
+ * Runs nightly data validation at 02:00 UTC:
  * - Statistical sanity checks (outliers, flatlines, invalid values)
  * - Correlation analysis and structural shift detection
  * - Data quality monitoring with health status tracking
  *
- * Also runs daily regime detection at 02:30 UTC:
+ * Runs daily regime detection at 02:30 UTC:
  * - K-means clustering (k=3, seeded) for regime classification
  * - Feature extraction from z-scores and rolling volatilities
  * - Automatic labeling as Calm/Normal/Stress
@@ -18,8 +23,8 @@
  * Features:
  * - Robust error handling with retry logic
  * - Sequential execution (ingest → compute)
- * - Nightly validation for data quality assurance
- * - Daily regime detection with clustering
+ * - Initial runs on startup for all workers
+ * - Scheduled jobs for validation, regime detection, and indicators
  * - Health monitoring and metrics tracking
  * - Graceful shutdown
  * - Prevents overlapping runs
@@ -61,6 +66,13 @@ let lastRegimeStatus: 'success' | 'fail' | null = null;
 let totalRegimeRuns = 0;
 let totalRegimeSuccesses = 0;
 let totalRegimeFailures = 0;
+
+// Metrics tracking - BTC Indicators
+let lastIndicatorsRun: Date | null = null;
+let lastIndicatorsStatus: 'success' | 'fail' | null = null;
+let totalIndicatorsRuns = 0;
+let totalIndicatorsSuccesses = 0;
+let totalIndicatorsFailures = 0;
 
 // Alert configuration
 const ALERT_ENABLED = process.env.ALERT_ENABLED === 'true';
@@ -412,6 +424,60 @@ async function runRegimeDetection(): Promise<void> {
 }
 
 /**
+ * Run BTC technical indicators calculation
+ */
+async function runBTCIndicators(): Promise<void> {
+  totalIndicatorsRuns++;
+  const startTime = Date.now();
+
+  try {
+    logger.info('📊 Starting BTC technical indicators calculation');
+
+    const result = await executeWithRetry('npm run worker:indicators:daily');
+
+    const duration = Date.now() - startTime;
+    lastIndicatorsRun = new Date();
+    lastIndicatorsStatus = 'success';
+    totalIndicatorsSuccesses++;
+
+    // Extract key metrics from output
+    const rsiMatch = result.stdout.match(/rsi: "?([0-9.]+)"?/);
+    const macdMatch = result.stdout.match(/macd: "?(-?[0-9.]+)"?/);
+
+    const rsi = rsiMatch ? rsiMatch[1] : 'unknown';
+    const macd = macdMatch ? macdMatch[1] : 'unknown';
+
+    logger.info(
+      {
+        rsi,
+        macd,
+        duration,
+        indicatorsSuccessRate: totalIndicatorsRuns > 0
+          ? ((totalIndicatorsSuccesses / totalIndicatorsRuns) * 100).toFixed(1) + '%'
+          : '0%',
+      },
+      '✅ BTC indicators calculated successfully'
+    );
+  } catch (error) {
+    lastIndicatorsRun = new Date();
+    lastIndicatorsStatus = 'fail';
+    totalIndicatorsFailures++;
+    const duration = Date.now() - startTime;
+
+    logger.error(
+      {
+        error: (error as Error).message,
+        duration,
+        indicatorsFailRate: totalIndicatorsRuns > 0
+          ? ((totalIndicatorsFailures / totalIndicatorsRuns) * 100).toFixed(1) + '%'
+          : '0%',
+      },
+      '❌ BTC indicators calculation failed'
+    );
+  }
+}
+
+/**
  * Get scheduler health metrics
  */
 function getHealthMetrics() {
@@ -449,6 +515,16 @@ function getHealthMetrics() {
       failures: totalRegimeFailures,
       successRate: totalRegimeRuns > 0
         ? ((totalRegimeSuccesses / totalRegimeRuns) * 100).toFixed(1) + '%'
+        : '0%',
+    },
+    indicators: {
+      lastRun: lastIndicatorsRun?.toISOString() || null,
+      lastStatus: lastIndicatorsStatus,
+      totalRuns: totalIndicatorsRuns,
+      successes: totalIndicatorsSuccesses,
+      failures: totalIndicatorsFailures,
+      successRate: totalIndicatorsRuns > 0
+        ? ((totalIndicatorsSuccesses / totalIndicatorsRuns) * 100).toFixed(1) + '%'
         : '0%',
     },
   };
@@ -499,6 +575,14 @@ async function main() {
   logger.info('Running initial pipeline cycle');
   await runDataPipeline();
 
+  // Run initial BTC indicators calculation
+  logger.info('Running initial BTC indicators calculation');
+  await runBTCIndicators();
+
+  // Run initial regime detection
+  logger.info('Running initial regime detection');
+  await runRegimeDetection();
+
   // Schedule recurring runs
   const task = cron.schedule(CRON_SCHEDULE, async () => {
     await runDataPipeline();
@@ -522,6 +606,18 @@ async function main() {
 
   regimeTask.start();
   logger.info({ schedule: '30 2 * * *' }, '✅ Daily regime detection scheduler started');
+
+  // Schedule BTC indicators twice daily (00:05 and 12:05 UTC)
+  const indicatorsTask1 = cron.schedule('5 0 * * *', async () => {
+    await runBTCIndicators();
+  });
+  const indicatorsTask2 = cron.schedule('5 12 * * *', async () => {
+    await runBTCIndicators();
+  });
+
+  indicatorsTask1.start();
+  indicatorsTask2.start();
+  logger.info({ schedule: '5 0,12 * * *' }, '✅ BTC indicators scheduler started');
 
   // Start health monitoring
   startHealthMonitoring();

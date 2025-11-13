@@ -12,12 +12,14 @@ interface MarketChartResponse {
 /**
  * Fetches Bitcoin daily return from CoinGecko with Coinbase fallback
  *
- * Primary: CoinGecko (provides 2-day price history for calculating return)
+ * Primary: CoinGecko (provides 4-day price history for 3-day MA smoothing)
  * Fallback: Coinbase spot price (requires previous price from cache/DB)
+ *
+ * Enhancement: Applies 3-day moving average to smooth out crypto volatility noise
  *
  * @param retries - Number of retry attempts for CoinGecko (default: 3)
  * @param previousPrice - Optional previous BTC price for Coinbase fallback
- * @returns Daily return value, timestamp, and metadata
+ * @returns Smoothed daily return value (3-day MA), timestamp, and metadata
  * @throws Error if both CoinGecko and Coinbase fallback fail
  */
 export const fetchBtcDailyReturn = async (
@@ -28,10 +30,10 @@ export const fetchBtcDailyReturn = async (
   timestamp: string;
   metadata: Record<string, unknown>;
 }> => {
-  // Try CoinGecko first (preferred - provides 2-day history)
+  // Try CoinGecko first (preferred - provides 4-day history for 3-day MA)
   const url = new URL(`${config.coinGeckoBase}/coins/bitcoin/market_chart`);
   url.searchParams.set('vs_currency', 'usd');
-  url.searchParams.set('days', '2');
+  url.searchParams.set('days', '4'); // Fetch 4 days to get 3 daily returns
   url.searchParams.set('interval', 'daily');
 
   let coinGeckoError: Error | null = null;
@@ -43,17 +45,44 @@ export const fetchBtcDailyReturn = async (
         throw new Error(`CoinGecko request failed: ${response.status} ${response.statusText}`);
       }
       const json = (await response.json()) as MarketChartResponse;
-      if (json.prices.length < 2) {
-        throw new Error('Not enough BTC datapoints from CoinGecko');
+      if (json.prices.length < 4) {
+        throw new Error('Not enough BTC datapoints from CoinGecko (need 4 days for 3-day MA)');
       }
-      const [prevTs, prevPrice] = json.prices[json.prices.length - 2];
-      const [currTs, currPrice] = json.prices[json.prices.length - 1];
-      const dailyReturn = (currPrice - prevPrice) / prevPrice;
 
-      logger.debug({ source: 'CoinGecko', prevPrice, currPrice }, 'BTC daily return calculated');
+      // Calculate daily returns for the last 3 days
+      const returns: number[] = [];
+      const prices: Array<{ ts: number; price: number }> = [];
+
+      for (let i = json.prices.length - 3; i < json.prices.length; i++) {
+        const [prevTs, prevPrice] = json.prices[i - 1];
+        const [currTs, currPrice] = json.prices[i];
+        const dailyReturn = (currPrice - prevPrice) / prevPrice;
+        returns.push(dailyReturn);
+        prices.push({ ts: currTs, price: currPrice });
+      }
+
+      // Calculate 3-day moving average
+      const smoothedReturn = returns.reduce((sum, ret) => sum + ret, 0) / returns.length;
+
+      // Raw return is the most recent day's return (unsmoothed)
+      const rawReturn = returns[returns.length - 1];
+
+      // Use the most recent timestamp
+      const [currTs, currPrice] = json.prices[json.prices.length - 1];
+      const [prevTs, prevPrice] = json.prices[json.prices.length - 2];
+
+      logger.debug(
+        {
+          source: 'CoinGecko',
+          rawReturn: rawReturn.toFixed(6),
+          smoothedReturn: smoothedReturn.toFixed(6),
+          ma_days: 3,
+        },
+        'BTC daily return calculated with 3-day MA smoothing'
+      );
 
       return {
-        value: dailyReturn,
+        value: smoothedReturn, // Return smoothed value
         timestamp: new Date(currTs).toISOString(),
         metadata: {
           source: 'CoinGecko',
@@ -61,6 +90,10 @@ export const fetchBtcDailyReturn = async (
           currPrice,
           prevTs,
           currTs,
+          rawReturn, // Preserve unsmoothed value for analysis
+          smoothedReturn,
+          smoothingWindow: 3,
+          returns_3day: returns, // Store all 3 returns for transparency
         },
       };
     } catch (error) {

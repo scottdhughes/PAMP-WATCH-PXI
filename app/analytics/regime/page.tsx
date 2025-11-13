@@ -23,17 +23,6 @@ export default function RegimeAnalyticsPage() {
     { refetchInterval: 60000 }
   );
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-black text-white flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-400 mx-auto mb-4"></div>
-          <p className="text-slate-500 font-light tracking-wide">Loading analytics...</p>
-        </div>
-      </div>
-    );
-  }
-
   const regimes = regimeData?.regimes || [];
 
   // Calculate centroids by regime
@@ -125,6 +114,18 @@ export default function RegimeAnalyticsPage() {
   // Extract feature names from centroids
   const featureNames = Object.keys(centroidsByRegime['Calm'] || centroidsByRegime['Normal'] || centroidsByRegime['Stress'] || {});
   const mainFeatures = featureNames.filter(f => f.endsWith('_zscore'));
+
+  // Show loading state after all hooks are called
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-black text-white flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-400 mx-auto mb-4"></div>
+          <p className="text-slate-500 font-light tracking-wide">Loading analytics...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-black text-white p-4 md:p-8">

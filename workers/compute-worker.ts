@@ -26,6 +26,7 @@ import {
 } from '../db.js';
 import { pxiMetricDefinitions } from '../shared/pxiMetrics.js';
 import { logger } from '../logger.js';
+import { config } from '../config.js';
 
 // Dynamic weight multipliers from spec
 const ALPHA = 1.5; // Multiplier when |z| > 1.0
@@ -71,13 +72,26 @@ function getWeightMultiplier(zScore: number): number {
  * Classify regime based on composite PXI value
  * Positive PXI = PAMP (low stress)
  * Negative PXI = Stress/Crisis
+ *
+ * Thresholds (non-overlapping):
+ * - Strong PAMP: PXI > 2.0
+ * - Moderate PAMP: 1.0 < PXI <= 2.0
+ * - Normal: -1.0 <= PXI <= 1.0
+ * - Elevated Stress: -2.0 <= PXI < -1.0
+ * - Crisis: PXI < -2.0
  */
 function classifyRegime(pxiValue: number): string {
-  if (pxiValue > 2.0) return 'Strong PAMP';
-  if (pxiValue > 1.0) return 'Moderate PAMP';
-  if (pxiValue >= -1.0) return 'Normal';
-  if (pxiValue >= -2.0) return 'Elevated Stress';
-  return 'Crisis';
+  if (pxiValue > 2.0) {
+    return 'Strong PAMP';
+  } else if (pxiValue > 1.0) {
+    return 'Moderate PAMP';
+  } else if (pxiValue >= -1.0) {
+    return 'Normal';
+  } else if (pxiValue >= -2.0) {
+    return 'Elevated Stress';
+  } else {
+    return 'Crisis';
+  }
 }
 
 /**
@@ -327,10 +341,58 @@ async function computePXI(): Promise<void> {
     // For each weight: normalized_weight = weight / total_weight
     logger.info({ totalWeight: totalWeight.toFixed(4) }, 'Normalizing weights');
 
-    // Normalize each metric's weight and recalculate contributions
-    let compositePxiValue = 0;
+    // Initial normalization
+    const initialNormalizedWeights = new Map<string, number>();
     for (const metric of metricResults) {
       const normalizedWeight = totalWeight > 0 ? metric.weight / totalWeight : 0;
+      initialNormalizedWeights.set(metric.id, normalizedWeight);
+    }
+
+    // Apply contribution cap (prevents any single metric from dominating)
+    const MAX_CONTRIB = config.maxMetricContribution; // Default 25%
+    const cappedWeights = new Map<string, number>();
+    let totalExcess = 0;
+
+    for (const [metricId, weight] of initialNormalizedWeights) {
+      if (weight > MAX_CONTRIB) {
+        totalExcess += weight - MAX_CONTRIB;
+        cappedWeights.set(metricId, MAX_CONTRIB);
+        logger.info({
+          metric: metricId,
+          originalWeight: (weight * 100).toFixed(1) + '%',
+          cappedAt: (MAX_CONTRIB * 100).toFixed(1) + '%',
+        }, 'Metric contribution capped');
+      } else {
+        cappedWeights.set(metricId, weight);
+      }
+    }
+
+    // Redistribute excess proportionally to non-capped metrics
+    if (totalExcess > 0) {
+      const nonCappedSum = Array.from(cappedWeights.values())
+        .filter(w => w < MAX_CONTRIB)
+        .reduce((sum, w) => sum + w, 0);
+
+      if (nonCappedSum > 0) {
+        for (const [metricId, weight] of cappedWeights) {
+          if (weight < MAX_CONTRIB) {
+            const redistributed = weight + (weight / nonCappedSum) * totalExcess;
+            cappedWeights.set(metricId, redistributed);
+          }
+        }
+        logger.info({
+          excess: (totalExcess * 100).toFixed(1) + '%',
+          redistributedTo: Array.from(cappedWeights.entries())
+            .filter(([_, w]) => w < MAX_CONTRIB)
+            .length,
+        }, 'Excess weight redistributed');
+      }
+    }
+
+    // Calculate contributions with capped weights
+    let compositePxiValue = 0;
+    for (const metric of metricResults) {
+      const normalizedWeight = cappedWeights.get(metric.id) ?? 0;
 
       // Recalculate contribution with normalized weight
       // Apply direction multiplier based on risk_direction
@@ -360,12 +422,21 @@ async function computePXI(): Promise<void> {
       }, 'Weight normalized and contribution recalculated');
     }
 
-    // 6. Round composite PXI to realistic precision
-    compositePxiValue = parseFloat(compositePxiValue.toFixed(3));
+    // 6. Store raw PXI with full precision (before clamping/rounding)
+    const rawPxiValue = compositePxiValue;
 
     // 7. Clamp to realistic range (-3σ to +3σ max)
-    if (compositePxiValue > 3) compositePxiValue = 3;
-    if (compositePxiValue < -3) compositePxiValue = -3;
+    // Rationale: Assumes approximate normality for interpretability
+    // Raw value preserved for future analysis and backtesting
+    let clampedPxiValue = compositePxiValue;
+    if (clampedPxiValue > 3) clampedPxiValue = 3;
+    if (clampedPxiValue < -3) clampedPxiValue = -3;
+
+    // 8. Round for display/UI (but keep clamped value in calculations)
+    const displayPxiValue = parseFloat(clampedPxiValue.toFixed(3));
+
+    // Use clamped value for regime classification and alerts
+    compositePxiValue = clampedPxiValue;
 
     // Debug: Log detailed contribution breakdown
     logger.info('=== PXI Contribution Breakdown ===');
@@ -400,10 +471,12 @@ async function computePXI(): Promise<void> {
       });
     }
 
-    // Check for PXI jump
+    // Check for PXI change (first derivative: |current - previous| > threshold)
+    // Note: This tracks simple change, not acceleration (second derivative)
     if (previousPxi !== null && Math.abs(compositePxiValue - previousPxi) > PXI_JUMP_THRESHOLD) {
+      const deltaPxi = compositePxiValue - previousPxi;
       alertsToInsert.push({
-        alertType: 'pxi_jump',
+        alertType: 'pxi_change',
         indicatorId: null,
         timestamp,
         rawValue: compositePxiValue,
@@ -411,7 +484,7 @@ async function computePXI(): Promise<void> {
         weight: null,
         contribution: null,
         threshold: PXI_JUMP_THRESHOLD,
-        message: `PXI jumped from ${previousPxi.toFixed(2)} to ${compositePxiValue.toFixed(2)} (Δ=${(compositePxiValue - previousPxi).toFixed(2)})`,
+        message: `Sudden PXI change: ${Math.abs(deltaPxi).toFixed(3)} (from ${previousPxi.toFixed(3)} to ${compositePxiValue.toFixed(3)})`,
         severity: 'warning',
       });
     }
@@ -423,12 +496,13 @@ async function computePXI(): Promise<void> {
     await insertContributions(contributionsToInsert);
     await insertCompositePxiRegime({
       timestamp,
-      pxiValue: compositePxiValue,
+      pxiValue: compositePxiValue, // Clamped value
       pxiZScore: compositePxiValue, // PXI itself is already a weighted sum of z-scores
       regime,
       totalWeight,
       pampCount,
       stressCount,
+      rawPxiValue: rawPxiValue, // Full precision before clamping
     });
     await insertHistoricalValues(historyValuesToInsert);
     await insertAlerts(alertsToInsert);

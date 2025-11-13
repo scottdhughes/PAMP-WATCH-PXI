@@ -1,7 +1,7 @@
 import { fetchLatestFredObservation } from './clients/fredClient.js';
 import { fetchBtcDailyReturn, fetchBtcPricesForIndicators } from './clients/coinGeckoClient.js';
 import { calculateRSI, calculateMACD, calculateSignalMultiplier } from './utils/technicalIndicators.js';
-import { fetchLatestIndicators } from './db.js';
+import { fetchLatestIndicators, insertDailyIndicators } from './db.js';
 import type { MetricFetcher, MetricSample } from './shared/types.js';
 import { logger } from './logger.js';
 
@@ -175,20 +175,36 @@ export const metricFetchers: MetricFetcher[] = [
             const ageHours = (cacheAge / (1000 * 60 * 60)).toFixed(1);
             logger.warn(
               { ageHours, threshold: 48 },
-              'Cache is stale, falling back to live calculation',
+              'Cache is stale, auto-refreshing with live calculation',
             );
 
-            // FALLBACK: Calculate indicators live
+            // AUTO-REFRESH: Calculate indicators live
             const prices = await fetchBtcPricesForIndicators(35);
             rsi = calculateRSI(prices, 14);
             macd = calculateMACD(prices, 12, 26, 9);
             signalMultiplier = calculateSignalMultiplier(rsi, macd);
-            indicatorSource = 'live_fallback';
+            indicatorSource = 'auto_refresh';
 
-            logger.info(
-              { rsi, macd: macd?.MACD, signalMultiplier, source: indicatorSource },
-              'BTC indicators calculated live (cache stale)',
-            );
+            // Update cache with freshly calculated values
+            const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+            try {
+              await insertDailyIndicators({
+                date: today,
+                rsi,
+                macd,
+                signalMultiplier,
+              });
+              logger.info(
+                { rsi, macd: macd?.value, signalMultiplier, source: indicatorSource },
+                'BTC indicators calculated and cache refreshed automatically',
+              );
+            } catch (cacheUpdateError) {
+              logger.error(
+                { error: cacheUpdateError },
+                'Failed to update cache after live calculation',
+              );
+              // Continue with live values even if cache update fails
+            }
           } else {
             // Use cached values
             rsi = cached.rsi;
@@ -207,8 +223,8 @@ export const metricFetchers: MetricFetcher[] = [
             );
           }
         } else {
-          // No cache exists - calculate live (first run)
-          logger.warn('No cached indicators found, calculating live (first run)');
+          // No cache exists - calculate live and create cache (first run)
+          logger.warn('No cached indicators found, calculating live and creating cache (first run)');
 
           const prices = await fetchBtcPricesForIndicators(35);
           rsi = calculateRSI(prices, 14);
@@ -216,10 +232,25 @@ export const metricFetchers: MetricFetcher[] = [
           signalMultiplier = calculateSignalMultiplier(rsi, macd);
           indicatorSource = 'live_first_run';
 
-          logger.info(
-            { rsi, macd: macd?.MACD, signalMultiplier },
-            'BTC indicators calculated live (first run)',
-          );
+          // Create initial cache entry
+          const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+          try {
+            await insertDailyIndicators({
+              date: today,
+              rsi,
+              macd,
+              signalMultiplier,
+            });
+            logger.info(
+              { rsi, macd: macd?.value, signalMultiplier },
+              'BTC indicators calculated and initial cache created',
+            );
+          } catch (cacheCreateError) {
+            logger.error(
+              { error: cacheCreateError },
+              'Failed to create initial cache, continuing with live values',
+            );
+          }
         }
       } catch (error) {
         logger.error(
