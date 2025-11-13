@@ -60,3 +60,5 @@ temp/
 # Archives
 *.zip
 Archive.zip
+venv/
+ml/models/

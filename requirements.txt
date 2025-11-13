@@ -1,0 +1,13 @@
+# Python Dependencies for Phase 5.2: LSTM Regime Forecasting
+# Install with: pip3 install -r requirements.txt
+
+# Deep Learning
+torch>=2.0.0
+numpy>=1.24.0
+
+# Database
+psycopg2-binary>=2.9.0
+
+# Optional: GPU acceleration (uncomment if using CUDA)
+# torchvision>=0.15.0
+# torchaudio>=2.0.0

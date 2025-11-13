@@ -1155,6 +1155,7 @@ export const fetchHistoricalPxi = async (days: number = 365): Promise<number[]> 
  * Store regime forecasts in the database
  *
  * @param forecasts - Array of forecast objects
+ * @param method - Forecasting method (default: 'statistical')
  */
 export const storeForecast = async (
   forecasts: Array<{
@@ -1164,7 +1165,8 @@ export const storeForecast = async (
     confidence: number;
     ciLower: number;
     ciUpper: number;
-  }>
+  }>,
+  method: string = 'statistical'
 ): Promise<void> => {
   let client: PoolClient | null = null;
   try {
@@ -1198,7 +1200,7 @@ export const storeForecast = async (
           forecast.confidence,
           forecast.ciLower,
           forecast.ciUpper,
-          'statistical',
+          method,
         ]
       );
     }

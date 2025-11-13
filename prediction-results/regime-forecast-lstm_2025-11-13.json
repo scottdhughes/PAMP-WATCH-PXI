@@ -1,0 +1,62 @@
+{
+  "timestamp": "2025-11-12T21:25:39.179993",
+  "method": "lstm",
+  "model": {
+    "hidden_size": 64,
+    "num_layers": 2,
+    "sequence_length": 10
+  },
+  "daysAnalyzed": 33,
+  "horizon": 7,
+  "forecasts": [
+    {
+      "day": 1,
+      "predictedPxi": 1.0162771860198343,
+      "predictedRegime": "Moderate PAMP",
+      "confidence": 0.95
+    },
+    {
+      "day": 2,
+      "predictedPxi": 1.0161720312220202,
+      "predictedRegime": "Moderate PAMP",
+      "confidence": 0.8999999999999999
+    },
+    {
+      "day": 3,
+      "predictedPxi": 1.016217158047754,
+      "predictedRegime": "Moderate PAMP",
+      "confidence": 0.85
+    },
+    {
+      "day": 4,
+      "predictedPxi": 1.0163720556189229,
+      "predictedRegime": "Moderate PAMP",
+      "confidence": 0.7999999999999999
+    },
+    {
+      "day": 5,
+      "predictedPxi": 1.0164444547436873,
+      "predictedRegime": "Moderate PAMP",
+      "confidence": 0.75
+    },
+    {
+      "day": 6,
+      "predictedPxi": 1.0164897984260206,
+      "predictedRegime": "Moderate PAMP",
+      "confidence": 0.7
+    },
+    {
+      "day": 7,
+      "predictedPxi": 1.0165350491698115,
+      "predictedRegime": "Moderate PAMP",
+      "confidence": 0.6499999999999999
+    }
+  ],
+  "summary": {
+    "avgPredictedPxi": 1.0163582476068644,
+    "avgConfidence": 0.7999999999999999,
+    "regimeDistribution": {
+      "Moderate PAMP": 7
+    }
+  }
+}

@@ -83,6 +83,17 @@ A TypeScript-based platform that aggregates macro/market data from multiple fina
 - ✅ **JSON Export**: Forecast results with trend analysis and regime distribution saved to `prediction-results/` directory
 - ✅ **CLI Tool**: Run forecasts with `npm run predict:regime -- --horizon=7 --days=365 --alpha=0.3`
 
+### LSTM Regime Forecasting (Phase 5.2)
+- ✅ **Deep Learning Architecture**: 2-layer LSTM with 64 hidden units, dropout regularization, and Adam optimizer
+- ✅ **Python Integration**: PyTorch-based predictor with TypeScript wrapper for seamless integration
+- ✅ **Virtual Environment Support**: Auto-detects and uses Python venv if available
+- ✅ **Model Persistence**: Save/load trained models to avoid retraining (stored in `ml/models/`)
+- ✅ **Min-Max Normalization**: Scales PXI values to [-1, 1] range for optimal LSTM training
+- ✅ **Multi-Day Forecasting**: Generates forecasts up to 14+ days ahead with decreasing confidence
+- ✅ **Training Metrics**: Train/validation loss tracking with best model checkpointing
+- ✅ **Database Integration**: Forecasts stored with method='lstm' for comparison with statistical methods
+- ✅ **CLI Tool**: Run with `npm run predict:regime:lstm -- --horizon=7 --days=365 --retrain`
+
 ### Production Features
 - ✅ **Error Handling**: Comprehensive error handling with retry logic and exponential backoff
 - ✅ **Rate Limiting**: 100 req/min default with configurable limits
@@ -212,6 +223,7 @@ PAMP-WATCH-PXI/
 
 - **Node.js** 20+ (LTS recommended)
 - **PostgreSQL** 15+ or **TimescaleDB** 2.14+
+- **Python** 3.8+ (required for Phase 5.2 LSTM forecasting)
 - **Docker** (optional, for local TimescaleDB)
 - **API Keys**:
   - [FRED API Key](https://fred.stlouisfed.org/docs/api/api_key.html)
@@ -230,7 +242,21 @@ cd PAMP-WATCH-PXI
 npm install
 ```
 
-### 2. Configure Environment
+### 2. Setup Python for LSTM Forecasting (Phase 5.2)
+
+**Create virtual environment and install dependencies:**
+```bash
+python3 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+**Verify installation:**
+```bash
+python3 -c "import torch, numpy, psycopg2; print('OK')"
+```
+
+### 3. Configure Environment
 
 ```bash
 cp .env.example .env
@@ -255,7 +281,7 @@ RATE_LIMIT_MAX=100              # Max requests per window
 RATE_LIMIT_WINDOW=1 minute      # Time window for rate limiting
 ```
 
-### 3. Start Database
+### 4. Start Database
 
 **Using Docker Compose** (Recommended)
 ```bash
@@ -555,11 +581,17 @@ npm run optimize:weights -- --days=90       # Optimize using 90 days of history
 npm run optimize:weights -- --target=regime # Optimize for regime prediction
 npm run optimize:weights -- --days=180 --target=pxi  # Custom period and target
 
-# Regime Forecasting (Phase 5.1)
+# Regime Forecasting (Phase 5.1: Statistical)
 npm run predict:regime                           # Generate 7-day forecast (default: 365 days history, alpha=0.3)
 npm run predict:regime -- --horizon=14           # Forecast 14 days ahead
 npm run predict:regime -- --days=180 --alpha=0.4 # Use 180 days history with custom smoothing
 npm run predict:regime -- --horizon=7 --days=90 --alpha=0.25  # Full customization
+
+# Regime Forecasting (Phase 5.2: LSTM)
+npm run predict:regime:lstm                      # Generate 7-day LSTM forecast (uses cached model)
+npm run predict:regime:lstm -- --retrain         # Train new LSTM model from scratch
+npm run predict:regime:lstm -- --horizon=14      # Forecast 14 days ahead
+npm run predict:regime:lstm -- --days=180 --retrain  # Train on 180 days of history
 
 # Build
 npm run build            # Build Next.js application
@@ -761,9 +793,15 @@ See [LICENSE](LICENSE) file for details.
   - [x] Automated regime classification from forecasts
   - [x] Database storage for forecast history
   - [x] CLI tool with configurable parameters
+- [x] **Phase 5.2: LSTM Regime Forecasting** (November 2025)
+  - [x] 2-layer LSTM neural network with PyTorch
+  - [x] Python-TypeScript interop with venv support
+  - [x] Model persistence and checkpointing
+  - [x] Min-Max normalization for optimal training
+  - [x] Multi-day forecasting with confidence scoring
 
 ### Future Enhancements
-- [ ] **Phase 5.2**: Advanced ML regime prediction (LSTM, Python interop)
+- [ ] UI enhancements for forecast visualization
 - [ ] Real-time WebSocket updates
 - [ ] Multi-timeframe analysis (hourly, daily, weekly)
 - [ ] Additional clustering algorithms (DBSCAN, hierarchical)

@@ -20,6 +20,7 @@
     "validate:data": "tsx scripts/validate-data.ts",
     "optimize:weights": "tsx scripts/optimize-weights.ts",
     "predict:regime": "tsx scripts/predict-regime.ts",
+    "predict:regime:lstm": "tsx scripts/predict-regime-lstm.ts",
     "test": "vitest"
   },
   "dependencies": {
