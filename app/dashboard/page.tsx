@@ -791,9 +791,8 @@ export default function Dashboard() {
 
           {/* Forecast Explanation */}
           <div className="mt-6 bg-slate-950/50 rounded-lg p-4 border border-slate-900">
-            <h4 className="text-slate-400 text-xs font-semibold mb-3 flex items-center gap-2">
-              <span>🔮</span>
-              <span>What This Forecast Means</span>
+            <h4 className="text-slate-400 text-xs font-semibold mb-3">
+              What This Forecast Means
             </h4>
             <div className="space-y-3 text-xs text-slate-400 leading-relaxed">
               {(() => {
@@ -801,7 +800,6 @@ export default function Dashboard() {
                 const avgForecastPxi = forecastChartData.reduce((sum, f) => sum + f.predicted, 0) / forecastChartData.length;
                 const finalPxi = forecastChartData[forecastChartData.length - 1]?.predicted || avgForecastPxi;
                 const trend = finalPxi > currentPxi ? 'rising' : finalPxi < currentPxi ? 'declining' : 'stable';
-                const trendEmoji = trend === 'rising' ? '📈' : trend === 'declining' ? '📉' : '➡️';
                 const avgConfidence = (forecastChartData.reduce((sum, f) => sum + f.confidence, 0) / forecastChartData.length * 100).toFixed(0);
 
                 const currentRegime = classifyRegime(currentPxi);
@@ -812,7 +810,7 @@ export default function Dashboard() {
                 return (
                   <>
                     <p>
-                      <strong className="text-purple-400">Prediction:</strong> The LSTM model forecasts PXI will be <strong className="text-purple-400 font-mono">{trend}</strong> {trendEmoji} over the next 7 days,
+                      <strong className="text-purple-400">Prediction:</strong> The LSTM model forecasts PXI will be <strong className="text-purple-400 font-mono">{trend}</strong> over the next 7 days,
                       moving from <span className="font-mono text-slate-300">{currentPxi.toFixed(2)}</span> to approximately <span className="font-mono text-slate-300">{finalPxi.toFixed(2)}</span>.
                     </p>
 
