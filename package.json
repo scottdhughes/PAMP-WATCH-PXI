@@ -19,6 +19,7 @@
     "scheduler": "tsx scheduler.ts",
     "validate:data": "tsx scripts/validate-data.ts",
     "optimize:weights": "tsx scripts/optimize-weights.ts",
+    "predict:regime": "tsx scripts/predict-regime.ts",
     "test": "vitest"
   },
   "dependencies": {

@@ -1112,6 +1112,112 @@ export const fetchHistoricalPxiRegimes = async (
 };
 
 /**
+ * Fetch historical PXI values for forecasting
+ *
+ * Retrieves daily PXI values for time series analysis and forecasting.
+ * Simplified version that only returns PXI values (not regime data).
+ *
+ * @param days - Number of days of history to fetch (default: 365)
+ * @returns Array of PXI values
+ */
+export const fetchHistoricalPxi = async (days: number = 365): Promise<number[]> => {
+  let client: PoolClient | null = null;
+  try {
+    client = await pool.connect();
+    // Get latest PXI value for each day
+    const result = await client.query(
+      `SELECT DISTINCT ON (DATE(timestamp))
+              pxi_value
+       FROM composite_pxi_regime
+       WHERE timestamp >= NOW() - INTERVAL '${days} days'
+       ORDER BY DATE(timestamp) ASC, timestamp DESC`,
+    );
+
+    const pxiValues = result.rows.map((row) => parseFloat(row.pxi_value));
+
+    logger.info(
+      { days, dataPoints: pxiValues.length },
+      'Fetched historical PXI data for forecasting'
+    );
+
+    return pxiValues;
+  } catch (error) {
+    logger.error({ error, days }, 'Failed to fetch historical PXI data');
+    throw error;
+  } finally {
+    if (client) {
+      client.release();
+    }
+  }
+};
+
+/**
+ * Store regime forecasts in the database
+ *
+ * @param forecasts - Array of forecast objects
+ */
+export const storeForecast = async (
+  forecasts: Array<{
+    horizonDays: number;
+    predictedPxi: number;
+    predictedRegime: string;
+    confidence: number;
+    ciLower: number;
+    ciUpper: number;
+  }>
+): Promise<void> => {
+  let client: PoolClient | null = null;
+  try {
+    client = await pool.connect();
+
+    const forecastDate = new Date();
+
+    for (const forecast of forecasts) {
+      await client.query(
+        `INSERT INTO pxi_forecasts (
+          forecast_date,
+          horizon_days,
+          predicted_pxi,
+          predicted_regime,
+          confidence,
+          ci_lower,
+          ci_upper,
+          method
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        ON CONFLICT (created_at, horizon_days) DO UPDATE SET
+          predicted_pxi = EXCLUDED.predicted_pxi,
+          predicted_regime = EXCLUDED.predicted_regime,
+          confidence = EXCLUDED.confidence,
+          ci_lower = EXCLUDED.ci_lower,
+          ci_upper = EXCLUDED.ci_upper`,
+        [
+          forecastDate,
+          forecast.horizonDays,
+          forecast.predictedPxi,
+          forecast.predictedRegime,
+          forecast.confidence,
+          forecast.ciLower,
+          forecast.ciUpper,
+          'statistical',
+        ]
+      );
+    }
+
+    logger.info(
+      { forecastCount: forecasts.length, forecastDate },
+      'Stored regime forecasts successfully'
+    );
+  } catch (error) {
+    logger.error({ error }, 'Failed to store forecasts');
+    throw error;
+  } finally {
+    if (client) {
+      client.release();
+    }
+  }
+};
+
+/**
  * Gracefully closes the database pool
  */
 export const closePool = async (): Promise<void> => {

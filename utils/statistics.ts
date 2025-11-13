@@ -142,3 +142,123 @@ export function regimePredictionAccuracy(
   const correct = predicted.filter((p, i) => p === actual[i]).length;
   return correct / predicted.length;
 }
+
+/**
+ * Exponential smoothing for time series data
+ * Reduces noise while preserving trend
+ *
+ * @param data - Time series data
+ * @param alpha - Smoothing factor (0-1), default 0.3
+ * @returns Smoothed series
+ */
+export function exponentialSmoothing(data: number[], alpha: number = 0.3): number[] {
+  if (data.length === 0) return [];
+  if (alpha < 0 || alpha > 1) {
+    throw new Error('Alpha must be between 0 and 1');
+  }
+
+  const smoothed = [data[0]];
+  for (let i = 1; i < data.length; i++) {
+    smoothed.push(alpha * data[i] + (1 - alpha) * smoothed[i - 1]);
+  }
+  return smoothed;
+}
+
+/**
+ * Linear regression forecast with confidence intervals
+ *
+ * @param history - Historical time series data
+ * @param horizon - Number of periods to forecast
+ * @returns Forecast values with confidence intervals
+ */
+export function forecastLinear(
+  history: number[],
+  horizon: number
+): {
+  forecast: number[];
+  ciLower: number[];
+  ciUpper: number[];
+  slope: number;
+  intercept: number;
+} {
+  if (history.length < 2) {
+    throw new Error('Need at least 2 data points for forecasting');
+  }
+
+  // Simple linear regression: y = mx + b
+  const n = history.length;
+  const x = Array.from({ length: n }, (_, i) => i);
+  const y = history;
+
+  const sumX = x.reduce((a, b) => a + b, 0);
+  const sumY = y.reduce((a, b) => a + b, 0);
+  const sumXY = x.reduce((sum, xi, i) => sum + xi * y[i], 0);
+  const sumXX = x.reduce((sum, xi) => sum + xi * xi, 0);
+
+  const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
+  const intercept = (sumY - slope * sumX) / n;
+
+  // Calculate residuals for confidence intervals
+  const residuals = y.map((yi, i) => yi - (slope * i + intercept));
+  const stdRes = standardDeviation(residuals);
+  const confidenceMultiplier = 1.96; // 95% confidence interval
+
+  // Generate forecasts
+  const forecast: number[] = [];
+  const ciLower: number[] = [];
+  const ciUpper: number[] = [];
+
+  for (let i = 0; i < horizon; i++) {
+    const step = n + i;
+    const pred = slope * step + intercept;
+    const conf = confidenceMultiplier * stdRes;
+
+    forecast.push(pred);
+    ciLower.push(pred - conf);
+    ciUpper.push(pred + conf);
+  }
+
+  return { forecast, ciLower, ciUpper, slope, intercept };
+}
+
+/**
+ * Map PXI value to regime name
+ *
+ * @param pxi - PXI value
+ * @returns Regime name
+ */
+export function deriveRegime(pxi: number): string {
+  if (pxi > 2.0) return 'Strong PAMP';
+  if (pxi > 1.0) return 'Moderate PAMP';
+  if (pxi >= -1.0) return 'Normal';
+  if (pxi >= -2.0) return 'Elevated Stress';
+  return 'Crisis';
+}
+
+/**
+ * Derive regime with confidence probability
+ * Confidence is based on how narrow the CI is (narrow = high confidence)
+ *
+ * @param pxi - Forecasted PXI value
+ * @param ciLower - Lower confidence interval
+ * @param ciUpper - Upper confidence interval
+ * @returns Regime and confidence probability
+ */
+export function deriveRegimeWithProb(
+  pxi: number,
+  ciLower: number,
+  ciUpper: number
+): { regime: string; confidence: number } {
+  const regime = deriveRegime(pxi);
+
+  // Confidence based on CI width relative to PXI value
+  // Narrower CI = higher confidence
+  const ciWidth = ciUpper - ciLower;
+  const pxiRange = Math.abs(pxi) + 1; // Add 1 to avoid division by zero
+  const confidenceRaw = 1 - Math.min(1, ciWidth / (pxiRange * 4));
+
+  // Ensure confidence is between 0.5 and 1.0
+  const confidence = Math.max(0.5, Math.min(1.0, confidenceRaw));
+
+  return { regime, confidence };
+}

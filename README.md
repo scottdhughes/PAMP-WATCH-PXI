@@ -74,6 +74,15 @@ A TypeScript-based platform that aggregates macro/market data from multiple fina
 - ✅ **JSON Output for Review**: Optimization results saved to `optimization-results/` directory with detailed metrics, correlations, and recommendations
 - ✅ **Configurable Analysis Period**: Run optimization on 30, 90, 365+ days of historical data via command-line arguments
 
+### Statistical Regime Forecasting (Phase 5.1)
+- ✅ **Exponential Smoothing**: Reduces noise in PXI time series while preserving trend (configurable alpha parameter, default 0.3)
+- ✅ **Linear Regression Forecasting**: Projects PXI values up to 7 days ahead with 95% confidence intervals
+- ✅ **Automated Regime Classification**: Maps forecasted PXI to regime categories (Crisis, Elevated Stress, Normal, Moderate PAMP, Strong PAMP)
+- ✅ **Confidence Scoring**: Confidence probabilities (0.5-1.0) based on confidence interval width
+- ✅ **Database Storage**: Forecasts stored in `pxi_forecasts` table with timestamps, horizons, and method tracking
+- ✅ **JSON Export**: Forecast results with trend analysis and regime distribution saved to `prediction-results/` directory
+- ✅ **CLI Tool**: Run forecasts with `npm run predict:regime -- --horizon=7 --days=365 --alpha=0.3`
+
 ### Production Features
 - ✅ **Error Handling**: Comprehensive error handling with retry logic and exponential backoff
 - ✅ **Rate Limiting**: 100 req/min default with configurable limits
@@ -546,6 +555,12 @@ npm run optimize:weights -- --days=90       # Optimize using 90 days of history
 npm run optimize:weights -- --target=regime # Optimize for regime prediction
 npm run optimize:weights -- --days=180 --target=pxi  # Custom period and target
 
+# Regime Forecasting (Phase 5.1)
+npm run predict:regime                           # Generate 7-day forecast (default: 365 days history, alpha=0.3)
+npm run predict:regime -- --horizon=14           # Forecast 14 days ahead
+npm run predict:regime -- --days=180 --alpha=0.4 # Use 180 days history with custom smoothing
+npm run predict:regime -- --horizon=7 --days=90 --alpha=0.25  # Full customization
+
 # Build
 npm run build            # Build Next.js application
 npm run compile          # Compile TypeScript to JavaScript
@@ -740,9 +755,15 @@ See [LICENSE](LICENSE) file for details.
   - [x] Statistical analysis utilities (Pearson, Sharpe, alignment)
   - [x] Historical data fetchers for optimization
   - [x] JSON output with detailed recommendations
+- [x] **Phase 5.1: Statistical Regime Forecasting** (November 2025)
+  - [x] Exponential smoothing for trend extraction
+  - [x] Linear regression forecasting with confidence intervals
+  - [x] Automated regime classification from forecasts
+  - [x] Database storage for forecast history
+  - [x] CLI tool with configurable parameters
 
 ### Future Enhancements
-- [ ] Machine learning regime prediction (LSTM, Random Forest)
+- [ ] **Phase 5.2**: Advanced ML regime prediction (LSTM, Python interop)
 - [ ] Real-time WebSocket updates
 - [ ] Multi-timeframe analysis (hourly, daily, weekly)
 - [ ] Additional clustering algorithms (DBSCAN, hierarchical)

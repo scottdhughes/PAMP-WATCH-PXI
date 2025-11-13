@@ -1,0 +1,73 @@
+{
+  "timestamp": "2025-11-13T02:10:33.467Z",
+  "daysAnalyzed": 33,
+  "horizon": 7,
+  "smoothingAlpha": 0.3,
+  "forecasts": [
+    {
+      "day": 1,
+      "predictedPxi": 1.6617170270854364,
+      "predictedRegime": "Moderate PAMP",
+      "confidence": 0.8598739342633602,
+      "ciLower": 0.9157651568660218,
+      "ciUpper": 2.407668897304851
+    },
+    {
+      "day": 2,
+      "predictedPxi": 1.6911282009567485,
+      "predictedRegime": "Moderate PAMP",
+      "confidence": 0.8614053633798988,
+      "ciLower": 0.9451763307373339,
+      "ciUpper": 2.437080071176163
+    },
+    {
+      "day": 3,
+      "predictedPxi": 1.7205393748280609,
+      "predictedRegime": "Moderate PAMP",
+      "confidence": 0.862903680586031,
+      "ciLower": 0.9745875046086462,
+      "ciUpper": 2.4664912450474756
+    },
+    {
+      "day": 4,
+      "predictedPxi": 1.7499505486993732,
+      "predictedRegime": "Moderate PAMP",
+      "confidence": 0.864369948293757,
+      "ciLower": 1.0039986784799586,
+      "ciUpper": 2.4959024189187877
+    },
+    {
+      "day": 5,
+      "predictedPxi": 1.7793617225706855,
+      "predictedRegime": "Moderate PAMP",
+      "confidence": 0.8658051839453503,
+      "ciLower": 1.0334098523512707,
+      "ciUpper": 2.5253135927901003
+    },
+    {
+      "day": 6,
+      "predictedPxi": 1.8087728964419978,
+      "predictedRegime": "Moderate PAMP",
+      "confidence": 0.8672103623677895,
+      "ciLower": 1.0628210262225832,
+      "ciUpper": 2.5547247666614123
+    },
+    {
+      "day": 7,
+      "predictedPxi": 1.8381840703133099,
+      "predictedRegime": "Moderate PAMP",
+      "confidence": 0.8685864179807992,
+      "ciLower": 1.0922322000938953,
+      "ciUpper": 2.5841359405327244
+    }
+  ],
+  "summary": {
+    "avgPredictedPxi": 1.749950548699373,
+    "avgConfidence": 0.8643078415452836,
+    "trendSlope": 0.029411173871312264,
+    "trendDirection": "Bullish",
+    "regimeDistribution": {
+      "Moderate PAMP": 7
+    }
+  }
+}
