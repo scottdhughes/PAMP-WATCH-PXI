@@ -803,19 +803,21 @@ export default function Dashboard() {
 
         {/* Active Alerts */}
         <div className="text-center bg-slate-950/50 rounded-lg p-4 border border-slate-900">
-          <h3 className="text-slate-500 text-xs uppercase tracking-wider mb-3">Active Alerts</h3>
+          <h3 className="text-slate-500 text-xs uppercase tracking-wider mb-3">System Alerts</h3>
           {activeAlerts.length > 0 ? (
-            <div className="space-y-2">
+            <div className="space-y-3">
               {activeAlerts.map((alert: any, index: number) => (
-                <p key={index} className="text-slate-400 text-xs">
-                  <span className={alert.severity === 'critical' ? 'text-red-400' : 'text-amber-400'}>
-                    {alert.severity === 'critical' ? '🚨' : '⚠'}
-                  </span> {alert.message?.slice(0, 50)}...
-                </p>
+                <div key={index} className="text-left">
+                  <p className="text-slate-300 text-xs leading-relaxed">
+                    <span className={alert.severity === 'critical' ? 'text-red-400' : 'text-amber-400'}>
+                      {alert.severity === 'critical' ? '🚨' : '⚠️'}
+                    </span> {alert.message}
+                  </p>
+                </div>
               ))}
             </div>
           ) : (
-            <p className="text-slate-600 text-sm">✓ No critical alerts</p>
+            <p className="text-slate-600 text-sm">✓ No active alerts</p>
           )}
         </div>
       </section>
