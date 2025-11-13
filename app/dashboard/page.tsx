@@ -566,31 +566,34 @@ export default function Dashboard() {
 
       {/* BTC Indicators & Analytics Section */}
       <section className="text-center space-y-4 mb-8 md:mb-12 w-full max-w-4xl px-4">
+        <h3 className="text-slate-500 text-xs md:text-sm tracking-wide mb-4">
+          BTC Market Indicators
+        </h3>
         <div className="flex flex-wrap items-center justify-center gap-3 md:gap-6 text-xs md:text-sm">
-          <span className="text-slate-500">RSI</span>
+          <span className="text-slate-500">RSI (Momentum)</span>
           <span className="text-blue-400 font-mono text-sm md:text-base">
             {rsi !== null ? rsi.toFixed(2) : 'N/A'}
           </span>
           <span className="text-slate-700">·</span>
-          <span className="text-slate-500">MACD</span>
+          <span className="text-slate-500">MACD (Trend)</span>
           <span className="text-blue-400 font-mono text-sm md:text-base">
             {macd !== null ? macd.toFixed(0) : 'N/A'}
           </span>
           <span className="text-slate-700">·</span>
-          <span className="text-slate-500">Multiplier</span>
+          <span className="text-slate-500">BTC Weight Multiplier</span>
           <span className="text-blue-400 font-mono text-sm md:text-base">
             {signalMultiplier.toFixed(2)}
           </span>
         </div>
 
         <div className="flex flex-wrap items-center justify-center gap-3 md:gap-6 text-xs md:text-sm pt-2">
-          <span className="text-slate-600">Sharpe</span>
+          <span className="text-slate-600">Sharpe Ratio (Risk-Reward)</span>
           <span className="text-slate-400 font-mono">{sharpe.toFixed(2)}</span>
           <span className="text-slate-800">·</span>
-          <span className="text-slate-600">Drawdown</span>
+          <span className="text-slate-600">Max Drawdown</span>
           <span className="text-slate-400 font-mono">{maxDrawdown.toFixed(2)}σ</span>
           <span className="text-slate-800">·</span>
-          <span className="text-slate-600">Volatility</span>
+          <span className="text-slate-600">Volatility (30D)</span>
           <span className="text-slate-400 font-mono">{volatility.toFixed(2)}σ</span>
         </div>
       </section>
