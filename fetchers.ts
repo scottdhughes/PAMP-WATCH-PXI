@@ -79,7 +79,8 @@ export const metricFetchers: MetricFetcher[] = [
     id: 'u3',
     label: 'U-3 Unemployment',
     fetch: async () => {
-      const { value, timestamp } = await fetchLatestFredObservation('UNRATE');
+      // Monthly metric - look back up to 12 months to find most recent valid value
+      const { value, timestamp } = await fetchLatestFredObservation('UNRATE', 3, 12);
       return {
         id: 'u3',
         label: 'U-3 Unemployment',

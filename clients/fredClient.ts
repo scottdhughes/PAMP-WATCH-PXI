@@ -18,14 +18,19 @@ interface FredObservationResponse {
  * Caches responses for configurable TTL (default 2 hours) to reduce API calls,
  * improve performance, and handle transient API outages.
  *
+ * For monthly metrics (like UNRATE), fetches multiple observations and looks back
+ * to find the most recent valid value, since releases can be delayed.
+ *
  * @param seriesId - FRED series identifier
  * @param retries - Number of retry attempts (default: 3)
+ * @param lookbackLimit - Number of observations to fetch for finding valid data (default: 1, use 12 for monthly)
  * @returns Value and timestamp of the latest observation
  * @throws Error if the request fails after all retries
  */
 export const fetchLatestFredObservation = async (
   seriesId: string,
   retries = 3,
+  lookbackLimit = 1,
 ): Promise<{ value: number; timestamp: string }> => {
   // Check cache first
   const cacheKey = `fred:latest:${seriesId}`;
@@ -40,7 +45,7 @@ export const fetchLatestFredObservation = async (
   url.searchParams.set('api_key', config.fredApiKey);
   url.searchParams.set('file_type', 'json');
   url.searchParams.set('sort_order', 'desc');
-  url.searchParams.set('limit', '1');
+  url.searchParams.set('limit', String(lookbackLimit));
 
   let lastError: Error | null = null;
 
@@ -51,24 +56,29 @@ export const fetchLatestFredObservation = async (
         throw new Error(`FRED request failed: ${response.status} ${response.statusText}`);
       }
       const json = (await response.json()) as FredObservationResponse;
-      const observation = json.observations[0];
-      if (!observation || observation.value === '.') {
-        throw new Error(`No observation found for series ${seriesId}`);
+
+      // Iterate through observations to find first valid value
+      // This is important for monthly metrics where recent releases may be delayed
+      for (const observation of json.observations) {
+        if (observation && observation.value !== '.') {
+          const result = {
+            value: Number(observation.value),
+            timestamp: new Date(`${observation.date}T00:00:00Z`).toISOString(),
+          };
+
+          // Cache successful response
+          setCached(cacheKey, result, config.fredCacheTtl);
+          logger.debug(
+            { seriesId, cacheKey, ttl: config.fredCacheTtl, observationDate: observation.date },
+            'FRED response cached'
+          );
+
+          return result;
+        }
       }
 
-      const result = {
-        value: Number(observation.value),
-        timestamp: new Date(`${observation.date}T00:00:00Z`).toISOString(),
-      };
-
-      // Cache successful response
-      setCached(cacheKey, result, config.fredCacheTtl);
-      logger.debug(
-        { seriesId, cacheKey, ttl: config.fredCacheTtl },
-        'FRED response cached'
-      );
-
-      return result;
+      // If we get here, no valid observations were found
+      throw new Error(`No valid observation found for series ${seriesId} in ${lookbackLimit} recent observations`);
     } catch (error) {
       lastError = error as Error;
       if (attempt < retries) {
