@@ -205,10 +205,14 @@ async function computePXI(): Promise<void> {
         logger.debug({ metricId: def.id, zScore: zScore.toFixed(3) }, 'Using stored 90-day z-score');
       } else {
         // Fall back to calculating from 90-day stats (latest_stats table)
-        // Skip if insufficient data (null stddev or < 5 samples)
-        if (!stats.stddev || stats.sampleCount < 5) {
+        // Skip if insufficient data (null stddev or < minimum samples)
+        // Monthly metrics (like u3) need fewer samples than daily metrics
+        const monthlyMetrics = ['u3']; // List of monthly-frequency metrics
+        const minSamples = monthlyMetrics.includes(def.id) ? 3 : 5;
+
+        if (!stats.stddev || stats.sampleCount < minSamples) {
           logger.warn(
-            { metricId: def.id, sampleCount: stats.sampleCount },
+            { metricId: def.id, sampleCount: stats.sampleCount, minRequired: minSamples },
             'Skipping metric - insufficient 90-day data for z-score calculation'
           );
           continue;
