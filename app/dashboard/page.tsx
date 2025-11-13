@@ -276,6 +276,28 @@ export default function Dashboard() {
     };
   }, [historyData, snapshot.data?.pxi]);
 
+  // Process forecast data for chart - MUST be before early return to satisfy Rules of Hooks
+  const forecastChartData = React.useMemo(() => {
+    const forecasts = forecastData?.forecasts || [];
+    if (!forecasts.length || !chartData.length) return [];
+
+    return forecasts.map((f: any) => {
+      const forecastDate = new Date();
+      forecastDate.setDate(forecastDate.getDate() + f.day);
+      forecastDate.setHours(12, 0, 0, 0);
+
+      return {
+        timestamp: forecastDate.getTime(),
+        predicted: f.predictedPxi,
+        ciLower: f.ciLower,
+        ciUpper: f.ciUpper,
+        confidence: f.confidence,
+        regime: f.predictedRegime,
+        day: f.day,
+      };
+    });
+  }, [forecastData, chartData]);
+
   const isLoading = snapshot.isLoading || isLoadingCache || isLoadingRisk;
 
   if (isLoading) {
@@ -654,7 +676,7 @@ export default function Dashboard() {
       )}
 
       {/* LSTM Forecast Section */}
-      {forecastData?.forecasts && forecastData.forecasts.length > 0 && (
+      {forecastChartData.length > 0 && (
         <section className="w-full max-w-5xl mb-8 md:mb-12 px-4 mt-8">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-slate-500 text-xs md:text-sm text-center flex-1 tracking-wide">
@@ -666,29 +688,7 @@ export default function Dashboard() {
           </div>
           <div className="bg-slate-950 rounded-lg p-2 md:p-4 border border-slate-900">
             <ResponsiveContainer width="100%" height={240}>
-              <LineChart
-                data={React.useMemo(() => {
-                  const forecasts = forecastData.forecasts || [];
-                  const lastHistoricalPoint = chartData[chartData.length - 1];
-
-                  // Create forecast data points starting from tomorrow
-                  return forecasts.map((f: any, idx: number) => {
-                    const forecastDate = new Date();
-                    forecastDate.setDate(forecastDate.getDate() + f.day);
-                    forecastDate.setHours(12, 0, 0, 0);
-
-                    return {
-                      timestamp: forecastDate.getTime(),
-                      predicted: f.predictedPxi,
-                      ciLower: f.ciLower,
-                      ciUpper: f.ciUpper,
-                      confidence: f.confidence,
-                      regime: f.predictedRegime,
-                      day: f.day,
-                    };
-                  });
-                }, [forecastData, chartData])}
-              >
+              <LineChart data={forecastChartData}>
                 <XAxis
                   dataKey="timestamp"
                   stroke="#334155"
@@ -707,12 +707,10 @@ export default function Dashboard() {
                     borderRadius: '8px',
                     fontSize: '12px'
                   }}
-                  labelFormatter={(value) => `Day +${forecastData.forecasts.find((f: any) => {
-                    const d = new Date();
-                    d.setDate(d.getDate() + f.day);
-                    d.setHours(12, 0, 0, 0);
-                    return d.getTime() === value;
-                  })?.day || ''}`}
+                  labelFormatter={(value) => {
+                    const item = forecastChartData.find((d) => d.timestamp === value);
+                    return item ? `Day +${item.day}` : new Date(value).toLocaleDateString();
+                  }}
                   formatter={(value: any, name: string) => {
                     if (name === 'predicted') return [value.toFixed(3), 'Predicted PXI'];
                     if (name === 'ciLower') return [value.toFixed(3), 'Lower CI'];
@@ -754,13 +752,13 @@ export default function Dashboard() {
               <div className="flex items-center gap-2">
                 <span className="text-slate-500">Avg Predicted PXI:</span>
                 <span className="text-purple-400 font-mono">
-                  {(forecastData.forecasts.reduce((sum: number, f: any) => sum + f.predictedPxi, 0) / forecastData.forecasts.length).toFixed(3)}
+                  {(forecastChartData.reduce((sum, f) => sum + f.predicted, 0) / forecastChartData.length).toFixed(3)}
                 </span>
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-slate-500">Avg Confidence:</span>
                 <span className="text-purple-400 font-mono">
-                  {(forecastData.forecasts.reduce((sum: number, f: any) => sum + f.confidence, 0) / forecastData.forecasts.length * 100).toFixed(0)}%
+                  {(forecastChartData.reduce((sum, f) => sum + f.confidence, 0) / forecastChartData.length * 100).toFixed(0)}%
                 </span>
               </div>
               <div className="flex items-center gap-2">
