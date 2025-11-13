@@ -32,6 +32,12 @@ const getRegimeIcon = (regime: string) => {
   return '';
 };
 
+// Monthly metrics that don't have meaningful short-term deltas
+const MONTHLY_METRICS = ['u3'];
+
+// Check if a metric is monthly (updated monthly, not daily)
+const isMonthlyMetric = (metricId: string) => MONTHLY_METRICS.includes(metricId);
+
 // Format metric values based on their type
 const formatMetricValue = (metric: any) => {
   const value = metric.value;
@@ -455,6 +461,12 @@ export default function Dashboard() {
                     INVERTED
                   </span>
                 )}
+                {/* Show "Monthly" badge for monthly metrics */}
+                {isMonthlyMetric(m.id) && (
+                  <span className="mt-1 px-2 py-0.5 text-[10px] bg-blue-500/20 text-blue-400 rounded border border-blue-500/30">
+                    Monthly
+                  </span>
+                )}
               </div>
             ))}
           </div>
@@ -499,18 +511,18 @@ export default function Dashboard() {
                     <td className="px-3 py-3 font-medium">{m.label}</td>
                     <td className="px-3 py-3 font-mono">{formatMetricValue(m)}</td>
                     <td className={clsx("px-3 py-3 font-mono text-sm", {
-                      "text-green-400": m.delta7D !== null && m.delta7D > 0,
-                      "text-red-400": m.delta7D !== null && m.delta7D < 0,
-                      "text-slate-500": m.delta7D === null
+                      "text-green-400": !isMonthlyMetric(m.id) && m.delta7D !== null && m.delta7D > 0,
+                      "text-red-400": !isMonthlyMetric(m.id) && m.delta7D !== null && m.delta7D < 0,
+                      "text-slate-600": isMonthlyMetric(m.id) || m.delta7D === null
                     })}>
-                      {m.delta7D !== null && m.delta7D !== undefined ? `${m.delta7D > 0 ? '+' : ''}${m.delta7D.toFixed(2)}%` : 'N/A'}
+                      {isMonthlyMetric(m.id) ? '—' : (m.delta7D !== null && m.delta7D !== undefined ? `${m.delta7D > 0 ? '+' : ''}${m.delta7D.toFixed(2)}%` : 'N/A')}
                     </td>
                     <td className={clsx("px-3 py-3 font-mono text-sm", {
-                      "text-green-400": m.delta30D !== null && m.delta30D > 0,
-                      "text-red-400": m.delta30D !== null && m.delta30D < 0,
-                      "text-slate-500": m.delta30D === null
+                      "text-green-400": !isMonthlyMetric(m.id) && m.delta30D !== null && m.delta30D > 0,
+                      "text-red-400": !isMonthlyMetric(m.id) && m.delta30D !== null && m.delta30D < 0,
+                      "text-slate-600": isMonthlyMetric(m.id) || m.delta30D === null
                     })}>
-                      {m.delta30D !== null && m.delta30D !== undefined ? `${m.delta30D > 0 ? '+' : ''}${m.delta30D.toFixed(2)}%` : 'N/A'}
+                      {isMonthlyMetric(m.id) ? '—' : (m.delta30D !== null && m.delta30D !== undefined ? `${m.delta30D > 0 ? '+' : ''}${m.delta30D.toFixed(2)}%` : 'N/A')}
                     </td>
                     <td className="px-3 py-3 font-mono text-slate-500">{m.lower?.toFixed(3)}</td>
                     <td className="px-3 py-3 font-mono text-slate-500">{m.upper?.toFixed(3)}</td>
