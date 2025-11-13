@@ -797,7 +797,7 @@ export default function Dashboard() {
             </h4>
             <div className="space-y-3 text-xs text-slate-400 leading-relaxed">
               {(() => {
-                const currentPxi = compositePxiValue;
+                const currentPxi = pxiValue;
                 const avgForecastPxi = forecastChartData.reduce((sum, f) => sum + f.predicted, 0) / forecastChartData.length;
                 const finalPxi = forecastChartData[forecastChartData.length - 1]?.predicted || avgForecastPxi;
                 const trend = finalPxi > currentPxi ? 'rising' : finalPxi < currentPxi ? 'declining' : 'stable';
