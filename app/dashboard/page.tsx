@@ -461,12 +461,6 @@ export default function Dashboard() {
                     INVERTED
                   </span>
                 )}
-                {/* Show "Monthly" badge for monthly metrics */}
-                {isMonthlyMetric(m.id) && (
-                  <span className="mt-1 px-2 py-0.5 text-[10px] bg-blue-500/20 text-blue-400 rounded border border-blue-500/30">
-                    Monthly
-                  </span>
-                )}
               </div>
             ))}
           </div>
