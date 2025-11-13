@@ -55,12 +55,17 @@ A TypeScript-based platform that aggregates macro/market data from multiple fina
 - ✅ **Dashboard Enhancements**: Δ7D and Δ30D delta displays with color coding
 - ✅ **Acceptance Criteria**: Z-score ≤1e-6, composite ≤0.001, correlation checks
 
-### Data Quality & Accuracy Enhancements
+### Data Quality & Accuracy Enhancements (Phase 2)
 - ✅ **Sparse Data Forward-Fill**: Automatic forward-filling for metrics with <50% daily coverage (e.g., U-3 unemployment)
 - ✅ **BTC 3-Day MA Smoothing**: Reduces cryptocurrency volatility noise with 3-day moving average on daily returns
 - ✅ **Auto-Refresh Stale Cache**: Automatically refreshes BTC technical indicators when cache exceeds 48 hours
 - ✅ **Contribution Cap**: Configurable 25% max contribution per metric prevents single-metric dominance (via `MAX_METRIC_CONTRIBUTION` env var)
 - ✅ **Weight Redistribution**: Excess weight from capped metrics redistributed proportionally to non-capped metrics
+
+### Operational Robustness & Intelligence (Phase 3)
+- ✅ **FRED API Caching**: In-memory response caching with configurable TTL (default 2 hours) reduces API calls, improves speed, and handles transient outages
+- ✅ **Auto-Suggest Bound Adjustments**: Detects frequent deviation alerts (>5 in 30 days) and suggests widening metric bounds by 20% to reduce false alerts
+- ✅ **Cache Statistics**: Built-in cache monitoring with size and key tracking for diagnostics
 
 ### Production Features
 - ✅ **Error Handling**: Comprehensive error handling with retry logic and exponential backoff
@@ -713,6 +718,10 @@ See [LICENSE](LICENSE) file for details.
   - [x] 3-day MA smoothing for BTC returns
   - [x] Auto-refresh stale BTC cache (>48 hours)
   - [x] Configurable 25% contribution cap with redistribution
+- [x] **Phase 3: Operational Robustness & Intelligence** (November 2025)
+  - [x] FRED API response caching (2-hour TTL, in-memory)
+  - [x] Auto-suggest bound adjustments (frequent deviation detection)
+  - [x] Cache monitoring and diagnostics
 
 ### Future Enhancements
 - [ ] Machine learning regime prediction
@@ -723,8 +732,8 @@ See [LICENSE](LICENSE) file for details.
 - [ ] Data export functionality (CSV, JSON)
 - [ ] Mobile app
 - [ ] Correlation alerts for diverging metrics
-- [ ] FRED response caching
-- [ ] Auto-suggest bound adjustments (10% deviation alerts)
+- [ ] Redis caching for multi-instance deployments
+- [ ] Stale-while-revalidate caching strategy
 
 ---
 

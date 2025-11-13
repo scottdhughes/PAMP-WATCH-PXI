@@ -650,6 +650,47 @@ export const insertAlerts = async (
 };
 
 /**
+ * Fetches recent alerts by type and indicator for bound adjustment suggestions
+ *
+ * @param alertType - Type of alert to filter (e.g., 'deviation_review')
+ * @param indicatorId - Indicator ID to filter
+ * @param days - Number of days to look back (default: 30)
+ * @returns Array of recent alerts
+ */
+export const getRecentAlerts = async (
+  alertType: string,
+  indicatorId: string,
+  days: number = 30
+): Promise<Array<{ timestamp: string; message: string; severity: string }>> => {
+  let client: PoolClient | null = null;
+  try {
+    client = await pool.connect();
+    const result = await client.query(
+      `SELECT timestamp, message, severity
+       FROM alerts
+       WHERE alert_type = $1
+         AND indicator_id = $2
+         AND timestamp >= NOW() - INTERVAL '${days} days'
+       ORDER BY timestamp DESC`,
+      [alertType, indicatorId]
+    );
+
+    return result.rows.map((row) => ({
+      timestamp: row.timestamp,
+      message: row.message,
+      severity: row.severity,
+    }));
+  } catch (error) {
+    logger.error({ error, alertType, indicatorId, days }, 'Failed to fetch recent alerts');
+    return []; // Return empty array on error to avoid breaking compute cycle
+  } finally {
+    if (client) {
+      client.release();
+    }
+  }
+};
+
+/**
  * Inserts historical values into the database (for live feed)
  */
 export const insertHistoricalValues = async (

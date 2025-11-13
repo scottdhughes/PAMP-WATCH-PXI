@@ -22,6 +22,7 @@ import {
   insertAlerts,
   insertHistoricalValues,
   insertComposite,
+  getRecentAlerts,
   closePool,
 } from '../db.js';
 import { pxiMetricDefinitions } from '../shared/pxiMetrics.js';
@@ -309,6 +310,47 @@ async function computePXI(): Promise<void> {
             },
             'Large deviation detected - flagged for review',
           );
+
+          // Check for frequent deviations and suggest bound adjustments
+          try {
+            const recentAlerts = await getRecentAlerts('deviation_review', def.id, 30);
+
+            // If we exceed the threshold (default 5 alerts in 30 days), suggest wider bounds
+            if (recentAlerts.length >= config.boundSuggestThreshold) {
+              const currentBounds = def.bounds;
+              if (currentBounds) {
+                // Suggest widening bounds by 20%
+                const suggestedMin = currentBounds.min * 0.8;
+                const suggestedMax = currentBounds.max * 1.2;
+
+                alertsToInsert.push({
+                  alertType: 'bound_suggestion',
+                  indicatorId: def.id,
+                  timestamp,
+                  rawValue: sample.value,
+                  zScore,
+                  weight: null,
+                  contribution: null,
+                  threshold: config.boundSuggestThreshold,
+                  message: `Frequent deviations for ${def.label} (${recentAlerts.length} alerts in 30 days, threshold: ${config.boundSuggestThreshold}). Consider updating bounds from [${currentBounds.min.toFixed(4)}, ${currentBounds.max.toFixed(4)}] to [${suggestedMin.toFixed(4)}, ${suggestedMax.toFixed(4)}]`,
+                  severity: 'info',
+                });
+
+                logger.info(
+                  {
+                    metric: def.id,
+                    alertCount: recentAlerts.length,
+                    currentBounds: [currentBounds.min, currentBounds.max],
+                    suggestedBounds: [suggestedMin, suggestedMax],
+                  },
+                  'Bound adjustment suggested due to frequent deviations'
+                );
+              }
+            }
+          } catch (error) {
+            // Log error but don't fail the compute cycle
+            logger.error({ error, metric: def.id }, 'Failed to check for bound suggestions');
+          }
         }
       }
       previousRawValues.set(def.id, sample.value);

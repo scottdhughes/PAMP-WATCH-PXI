@@ -83,4 +83,10 @@ export const config = {
 
   // PXI Computation
   maxMetricContribution: Number(process.env.MAX_METRIC_CONTRIBUTION ?? 0.25), // Default 25% cap
+
+  // API Caching (Phase 3)
+  fredCacheTtl: Number(process.env.FRED_CACHE_TTL ?? 7200), // Default 2 hours in seconds
+
+  // Bound Adjustment Suggestions (Phase 3)
+  boundSuggestThreshold: Number(process.env.BOUND_SUGGEST_THRESHOLD ?? 5), // Deviation alerts in 30 days before suggesting bound adjustment
 };

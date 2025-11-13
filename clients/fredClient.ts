@@ -1,4 +1,6 @@
 import { config } from '../config.js';
+import { getCached, setCached } from '../utils/cache.js';
+import { logger } from '../logger.js';
 
 /**
  * Response type from FRED API
@@ -11,7 +13,10 @@ interface FredObservationResponse {
 }
 
 /**
- * Fetches the latest observation for a FRED series with retry logic
+ * Fetches the latest observation for a FRED series with caching and retry logic
+ *
+ * Caches responses for configurable TTL (default 2 hours) to reduce API calls,
+ * improve performance, and handle transient API outages.
  *
  * @param seriesId - FRED series identifier
  * @param retries - Number of retry attempts (default: 3)
@@ -22,6 +27,14 @@ export const fetchLatestFredObservation = async (
   seriesId: string,
   retries = 3,
 ): Promise<{ value: number; timestamp: string }> => {
+  // Check cache first
+  const cacheKey = `fred:latest:${seriesId}`;
+  const cached = getCached(cacheKey);
+  if (cached) {
+    logger.debug({ seriesId, cacheKey }, 'FRED cache hit');
+    return cached;
+  }
+
   const url = new URL('https://api.stlouisfed.org/fred/series/observations');
   url.searchParams.set('series_id', seriesId);
   url.searchParams.set('api_key', config.fredApiKey);
@@ -42,10 +55,20 @@ export const fetchLatestFredObservation = async (
       if (!observation || observation.value === '.') {
         throw new Error(`No observation found for series ${seriesId}`);
       }
-      return {
+
+      const result = {
         value: Number(observation.value),
         timestamp: new Date(`${observation.date}T00:00:00Z`).toISOString(),
       };
+
+      // Cache successful response
+      setCached(cacheKey, result, config.fredCacheTtl);
+      logger.debug(
+        { seriesId, cacheKey, ttl: config.fredCacheTtl },
+        'FRED response cached'
+      );
+
+      return result;
     } catch (error) {
       lastError = error as Error;
       if (attempt < retries) {
