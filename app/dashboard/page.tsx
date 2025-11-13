@@ -776,6 +776,62 @@ export default function Dashboard() {
               </div>
             </div>
           </div>
+
+          {/* Forecast Explanation */}
+          <div className="mt-6 bg-slate-950/50 rounded-lg p-4 border border-slate-900">
+            <h4 className="text-slate-400 text-xs font-semibold mb-3 flex items-center gap-2">
+              <span>🔮</span>
+              <span>What This Forecast Means</span>
+            </h4>
+            <div className="space-y-3 text-xs text-slate-400 leading-relaxed">
+              {(() => {
+                const currentPxi = compositePxiValue;
+                const avgForecastPxi = forecastChartData.reduce((sum, f) => sum + f.predicted, 0) / forecastChartData.length;
+                const finalPxi = forecastChartData[forecastChartData.length - 1]?.predicted || avgForecastPxi;
+                const trend = finalPxi > currentPxi ? 'rising' : finalPxi < currentPxi ? 'declining' : 'stable';
+                const trendEmoji = trend === 'rising' ? '📈' : trend === 'declining' ? '📉' : '➡️';
+                const avgConfidence = (forecastChartData.reduce((sum, f) => sum + f.confidence, 0) / forecastChartData.length * 100).toFixed(0);
+
+                const currentRegime = classifyRegime(currentPxi);
+                const forecastRegime = classifyRegime(avgForecastPxi);
+
+                const regimeChange = currentRegime !== forecastRegime;
+
+                return (
+                  <>
+                    <p>
+                      <strong className="text-purple-400">Prediction:</strong> The LSTM model forecasts PXI will be <strong className="text-purple-400 font-mono">{trend}</strong> {trendEmoji} over the next 7 days,
+                      moving from <span className="font-mono text-slate-300">{currentPxi.toFixed(2)}</span> to approximately <span className="font-mono text-slate-300">{finalPxi.toFixed(2)}</span>.
+                    </p>
+
+                    {regimeChange ? (
+                      <p>
+                        <strong className="text-amber-400">Regime Shift:</strong> Markets are expected to transition from <strong className={`${getRegimeColor(currentRegime)}`}>{currentRegime}</strong> to <strong className={`${getRegimeColor(forecastRegime)}`}>{forecastRegime}</strong> conditions.
+                      </p>
+                    ) : (
+                      <p>
+                        <strong className="text-blue-400">Regime Stability:</strong> Markets are expected to remain in <strong className={`${getRegimeColor(currentRegime)}`}>{currentRegime}</strong> territory.
+                      </p>
+                    )}
+
+                    <p>
+                      <strong className="text-slate-300">What to Watch:</strong> {trend === 'rising'
+                        ? 'Improving conditions suggest easing credit spreads, declining volatility, and increased risk appetite. Favorable for risk assets.'
+                        : trend === 'declining'
+                        ? 'Worsening conditions suggest widening spreads, rising volatility, and decreasing risk appetite. Exercise caution with risk exposure.'
+                        : 'Stable conditions suggest markets are consolidating. Monitor for breakout signals.'
+                      }
+                    </p>
+
+                    <p className="text-[10px] text-slate-600 pt-2 border-t border-slate-900">
+                      Model trained on 365 days of PXI history using 10-day sequences. Confidence: {avgConfidence}%.
+                      Purple dashed line shows predicted trajectory, gray band shows uncertainty range.
+                    </p>
+                  </>
+                );
+              })()}
+            </div>
+          </div>
         </section>
       )}
 
