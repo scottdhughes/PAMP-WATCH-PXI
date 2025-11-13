@@ -67,6 +67,13 @@ A TypeScript-based platform that aggregates macro/market data from multiple fina
 - ✅ **Auto-Suggest Bound Adjustments**: Detects frequent deviation alerts (>5 in 30 days) and suggests widening metric bounds by 20% to reduce false alerts
 - ✅ **Cache Statistics**: Built-in cache monitoring with size and key tracking for diagnostics
 
+### Quantitative Optimization (Phase 4)
+- ✅ **Correlation-Based Weight Optimization**: Analyzes historical data to suggest optimal metric weights based on correlation with PXI or regime predictions
+- ✅ **Statistical Analysis Library**: Pearson correlation, mean, standard deviation, Sharpe ratio, alignment scoring, and z-score normalization utilities
+- ✅ **Historical Data Fetchers**: Database functions to retrieve metric history and PXI/regime data for backtesting and optimization
+- ✅ **JSON Output for Review**: Optimization results saved to `optimization-results/` directory with detailed metrics, correlations, and recommendations
+- ✅ **Configurable Analysis Period**: Run optimization on 30, 90, 365+ days of historical data via command-line arguments
+
 ### Production Features
 - ✅ **Error Handling**: Comprehensive error handling with retry logic and exponential backoff
 - ✅ **Rate Limiting**: 100 req/min default with configurable limits
@@ -533,6 +540,12 @@ npx tsx scripts/validate-pxi.ts   # Generate validation report
 npm test                          # Run all tests
 npm test tests/pxi_validation.test.ts  # Run PXI validation tests
 
+# Optimization (Phase 4)
+npm run optimize:weights                    # Run weight optimization (default: 365 days, target: pxi)
+npm run optimize:weights -- --days=90       # Optimize using 90 days of history
+npm run optimize:weights -- --target=regime # Optimize for regime prediction
+npm run optimize:weights -- --days=180 --target=pxi  # Custom period and target
+
 # Build
 npm run build            # Build Next.js application
 npm run compile          # Compile TypeScript to JavaScript
@@ -722,9 +735,14 @@ See [LICENSE](LICENSE) file for details.
   - [x] FRED API response caching (2-hour TTL, in-memory)
   - [x] Auto-suggest bound adjustments (frequent deviation detection)
   - [x] Cache monitoring and diagnostics
+- [x] **Phase 4: Quantitative Optimization** (November 2025)
+  - [x] Correlation-based weight optimization script
+  - [x] Statistical analysis utilities (Pearson, Sharpe, alignment)
+  - [x] Historical data fetchers for optimization
+  - [x] JSON output with detailed recommendations
 
 ### Future Enhancements
-- [ ] Machine learning regime prediction
+- [ ] Machine learning regime prediction (LSTM, Random Forest)
 - [ ] Real-time WebSocket updates
 - [ ] Multi-timeframe analysis (hourly, daily, weekly)
 - [ ] Additional clustering algorithms (DBSCAN, hierarchical)
@@ -734,6 +752,9 @@ See [LICENSE](LICENSE) file for details.
 - [ ] Correlation alerts for diverging metrics
 - [ ] Redis caching for multi-instance deployments
 - [ ] Stale-while-revalidate caching strategy
+- [ ] Automated weight application (after backtest validation)
+- [ ] Parameter grid search for optimal thresholds
+- [ ] Genetic algorithm for multi-objective optimization
 
 ---
 

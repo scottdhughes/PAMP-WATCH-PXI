@@ -1012,6 +1012,106 @@ export const fetchHistoricalMetricValue = async (
 };
 
 /**
+ * Fetch historical metric data for weight optimization
+ *
+ * Retrieves daily metric values for all indicators over a specified time period.
+ * Used for correlation analysis and quantitative optimization.
+ *
+ * @param days - Number of days of history to fetch (default: 365)
+ * @returns Map of indicator_id to array of {date, value} pairs
+ */
+export const fetchHistoricalMetricData = async (
+  days: number = 365
+): Promise<Map<string, Array<{ date: string; value: number }>>> => {
+  let client: PoolClient | null = null;
+  try {
+    client = await pool.connect();
+    const result = await client.query(
+      `SELECT indicator_id, date, raw_value
+       FROM history_values
+       WHERE date >= NOW() - INTERVAL '${days} days'
+       ORDER BY indicator_id, date ASC`,
+    );
+
+    const dataMap = new Map<string, Array<{ date: string; value: number }>>();
+
+    for (const row of result.rows) {
+      const indicatorId = row.indicator_id;
+      if (!dataMap.has(indicatorId)) {
+        dataMap.set(indicatorId, []);
+      }
+      dataMap.get(indicatorId)!.push({
+        date: row.date instanceof Date ? row.date.toISOString().split('T')[0] : row.date,
+        value: row.raw_value,
+      });
+    }
+
+    logger.info(
+      { indicators: dataMap.size, days, totalRows: result.rows.length },
+      'Fetched historical metric data for optimization'
+    );
+
+    return dataMap;
+  } catch (error) {
+    logger.error({ error, days }, 'Failed to fetch historical metric data');
+    throw error;
+  } finally {
+    if (client) {
+      client.release();
+    }
+  }
+};
+
+/**
+ * Fetch historical PXI and regime data for optimization
+ *
+ * Retrieves daily PXI values and regime classifications for correlation analysis.
+ *
+ * @param days - Number of days of history to fetch (default: 365)
+ * @returns Array of {date, pxiValue, regime} objects
+ */
+export const fetchHistoricalPxiRegimes = async (
+  days: number = 365
+): Promise<Array<{ date: string; pxiValue: number; regime: string }>> => {
+  let client: PoolClient | null = null;
+  try {
+    client = await pool.connect();
+    // Get latest PXI value for each day (since compute runs multiple times/day)
+    // Use DISTINCT ON to get the latest timestamp per day
+    const result = await client.query(
+      `SELECT DISTINCT ON (DATE(timestamp))
+              DATE(timestamp) as date,
+              pxi_value,
+              regime,
+              timestamp
+       FROM composite_pxi_regime
+       WHERE timestamp >= NOW() - INTERVAL '${days} days'
+       ORDER BY DATE(timestamp) ASC, timestamp DESC`,
+    );
+
+    const data = result.rows.map((row) => ({
+      date: row.date instanceof Date ? row.date.toISOString().split('T')[0] : row.date,
+      pxiValue: row.pxi_value,
+      regime: row.regime,
+    }));
+
+    logger.info(
+      { days, rows: data.length },
+      'Fetched historical PXI/regime data for optimization'
+    );
+
+    return data;
+  } catch (error) {
+    logger.error({ error, days }, 'Failed to fetch historical PXI/regime data');
+    throw error;
+  } finally {
+    if (client) {
+      client.release();
+    }
+  }
+};
+
+/**
  * Gracefully closes the database pool
  */
 export const closePool = async (): Promise<void> => {

@@ -18,6 +18,7 @@
     "worker:run": "npm run worker:ingest && npm run worker:compute",
     "scheduler": "tsx scheduler.ts",
     "validate:data": "tsx scripts/validate-data.ts",
+    "optimize:weights": "tsx scripts/optimize-weights.ts",
     "test": "vitest"
   },
   "dependencies": {
