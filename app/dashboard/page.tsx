@@ -22,7 +22,10 @@ const getRegimeColor = (regime: string) => {
     'Stable': 'text-green-400',
     'Caution': 'text-amber-400',
     'Crisis': 'text-red-500',
+    // LSTM forecast regime types
     'Strong PAMP': 'text-green-400',
+    'Moderate PAMP': 'text-green-300',
+    'Elevated Stress': 'text-orange-400',
   };
   return colors[regime] || 'text-slate-300';
 };
@@ -30,6 +33,15 @@ const getRegimeColor = (regime: string) => {
 const getRegimeIcon = (regime: string) => {
   // No icons for cleaner look
   return '';
+};
+
+// Classify PXI value into regime
+const classifyRegime = (pxi: number): string => {
+  if (pxi > 2.0) return 'Strong PAMP';
+  if (pxi > 1.0) return 'Moderate PAMP';
+  if (pxi >= -1.0) return 'Normal';
+  if (pxi >= -2.0) return 'Elevated Stress';
+  return 'Crisis';
 };
 
 // Monthly metrics that don't have meaningful short-term deltas
