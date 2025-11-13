@@ -362,6 +362,37 @@ async function computePXI(): Promise<void> {
       // Generate alerts for high z-scores
       if (Math.abs(zScore) > Z_ALERT_THRESHOLD) {
         const severity = Math.abs(zScore) > 2.5 ? 'critical' : 'warning';
+
+        // Generate contextual explanation based on metric and direction
+        const getAlertExplanation = (metricId: string, z: number): string => {
+          const isHigh = z > 0;
+
+          switch (metricId) {
+            case 'hyOas':
+              return isHigh ? 'High-yield spreads widening, credit stress rising' : 'HY spreads tight, markets complacent';
+            case 'igOas':
+              return isHigh ? 'Investment-grade spreads widening, risk aversion increasing' : 'IG spreads compressed, potential complacency';
+            case 'vix':
+              return isHigh ? 'Market volatility elevated, fear increasing' : 'VIX unusually low, complacency risk';
+            case 'u3':
+              return isHigh ? 'Unemployment rising, labor market weakening' : 'Unemployment falling, tight labor market';
+            case 'usd':
+              return isHigh ? 'Dollar strength may pressure exports and emerging markets' : 'Dollar weakness, potential inflationary pressure';
+            case 'nfci':
+              return isHigh ? 'Financial conditions tightening, credit stress rising' : 'Financial conditions loose, potential overheating';
+            case 'yc_10y_2y':
+              return isHigh ? 'Yield curve steepening, growth expectations improving' : 'Yield curve flattening/inverted, recession risk';
+            case 'btcReturn':
+              return isHigh ? 'Bitcoin rallying strongly, risk-on sentiment' : 'Bitcoin selling off, risk aversion';
+            default:
+              return '';
+          }
+        };
+
+        const explanation = getAlertExplanation(def.id, zScore);
+        const baseMessage = `${def.label}: z-score ${zScore.toFixed(2)} exceeds threshold ${Z_ALERT_THRESHOLD}`;
+        const fullMessage = explanation ? `${baseMessage} — ${explanation}` : baseMessage;
+
         alertsToInsert.push({
           alertType: 'high_z_score',
           indicatorId: def.id,
@@ -371,7 +402,7 @@ async function computePXI(): Promise<void> {
           weight: actualWeight,
           contribution,
           threshold: Z_ALERT_THRESHOLD,
-          message: `${def.label}: z-score ${zScore.toFixed(2)} exceeds threshold ${Z_ALERT_THRESHOLD}`,
+          message: fullMessage,
           severity,
         });
       }
