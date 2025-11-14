@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computePXI } from './computePXI.js';
+import { computePXI } from './computePXI.ts';
 const inputs = [
     { id: 'hyOas', value: 0.04 },
     { id: 'igOas', value: 0.02 },

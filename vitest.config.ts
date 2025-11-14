@@ -4,6 +4,11 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
+    exclude: [
+      '**/node_modules/**',
+      '**/dist/**',
+      'PAMP-WATCH-PXI/**', // Ignore archived copy inside repo to avoid duplicate suites
+    ],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],

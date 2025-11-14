@@ -4,6 +4,7 @@ import type { MetricSample } from '../shared/types.js';
 describe('Security Tests', () => {
   describe('SQL Injection Prevention', () => {
     it('should use parameterized queries in upsertMetricSamples', async () => {
+      vi.resetModules();
       // Mock the pg module
       const mockQuery = vi.fn().mockResolvedValue({ rows: [] });
       const mockRelease = vi.fn();

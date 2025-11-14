@@ -8,7 +8,7 @@
 
 import { pool } from '../db.js';
 import { logger } from '../logger.js';
-import { computePXI } from '../computePXI.js';
+import { computePXI } from '../computePXI';
 
 interface HistoricalMetric {
   date: string;

@@ -10,6 +10,15 @@ import { pool } from '../db.js';
 import { pxiMetricDefinitions } from '../shared/pxiMetrics.js';
 import { mean, std } from 'mathjs';
 
+const ENABLE_VALIDATION = process.env.PXI_VALIDATION_ENABLED === 'true';
+const describeIf = ENABLE_VALIDATION ? describe : describe.skip;
+
+if (!ENABLE_VALIDATION) {
+  console.warn(
+    'Skipping PXI validation suite (set PXI_VALIDATION_ENABLED=true to run full database validations).',
+  );
+}
+
 // Acceptance criteria
 const Z_SCORE_TOLERANCE = 1e-6; // Z-score must match within 1e-6
 const TOTAL_WEIGHT = pxiMetricDefinitions
@@ -29,7 +38,7 @@ interface PXIComposite {
   metrics: MetricSample[];
 }
 
-describe('PXI Validation Suite', () => {
+describeIf('PXI Validation Suite', () => {
   let latestComposite: PXIComposite | null = null;
   let historicalData: Map<string, number[]> = new Map();
 
@@ -334,8 +343,8 @@ describe('PXI Validation Suite', () => {
     it('should have regime classification that matches PXI level', async () => {
       const regimeResult = await pool.query(`
         SELECT regime, pxi_value
-        FROM pxi_regimes
-        ORDER BY date DESC
+        FROM composite_pxi_regime
+        ORDER BY timestamp DESC
         LIMIT 1
       `);
 
