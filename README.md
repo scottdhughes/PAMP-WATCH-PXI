@@ -189,7 +189,13 @@ PAMP-WATCH-PXI/
 │   └── 007_add_pxi_regimes.sql  # K-means regime table
 │
 ├── docs/                         # Documentation
-│   └── pxi-methodology.md        # Complete PXI calculation methodology
+│   ├── pxi-methodology.md        # Complete PXI calculation methodology
+│   ├── IMPLEMENTATION_NOTES.md   # External API details & integration notes
+│   ├── IMPLEMENTATION_SUMMARY.md # Phase-by-phase delivery log
+│   ├── PXI_ENHANCEMENT_SPEC.md   # Original enhancement specification
+│   ├── scheduler.md              # Cron configuration and automation plan
+│   ├── SETUP.md                  # Environment/bootstrap instructions
+│   └── TEST_REPORT.md            # QA + validation outcomes
 │
 ├── utils/                        # Utility functions
 │   ├── fetcher.ts               # API fetch utility for React Query
@@ -749,8 +755,8 @@ psql $DATABASE_URL -c "\dt"
 ## 📚 Additional Documentation
 
 - **Methodology**: See `docs/pxi-methodology.md` for complete calculation details
-- **API Specifics**: See `IMPLEMENTATION_NOTES.md` for external API details
-- **Scheduling**: See `scheduler.md` for cron configuration
+- **API Specifics**: See `docs/IMPLEMENTATION_NOTES.md` for external API details
+- **Scheduling**: See `docs/scheduler.md` for cron configuration
 - **Testing**: See test files in `tests/` directory
 
 ---

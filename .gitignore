@@ -60,5 +60,6 @@ temp/
 # Archives
 *.zip
 Archive.zip
+PAMP-WATCH-PXI/
 venv/
 ml/models/

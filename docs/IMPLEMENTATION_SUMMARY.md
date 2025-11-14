@@ -707,7 +707,7 @@ Chicago Fed NFCI: z=-0.421, contribution=-0.547, weight=1.30 (base×1.3)
 | Bounds deviation check working | ✅ PASS | 10% rule implemented, flags stored |
 | Alert logic functioning | ✅ PASS | All 4 alert types operational |
 | Test coverage | ⚠️ MANUAL | Tested via live execution, formal unit tests recommended |
-| Documentation updated | ✅ PASS | This document + PXI_ENHANCEMENT_SPEC.md |
+| Documentation updated | ✅ PASS | This document + `docs/PXI_ENHANCEMENT_SPEC.md` |
 
 ---
 
@@ -727,8 +727,8 @@ Chicago Fed NFCI: z=-0.421, contribution=-0.547, weight=1.30 (base×1.3)
 1. `migrations/002_historical_stats.sql` - Database schema
 2. `components/Alerts.tsx` - Alert display component
 3. `components/RegimeIndicator.tsx` - Regime display component
-4. `PXI_ENHANCEMENT_SPEC.md` - Original specification
-5. `IMPLEMENTATION_SUMMARY.md` - This document
+4. `docs/PXI_ENHANCEMENT_SPEC.md` - Original specification
+5. `docs/IMPLEMENTATION_SUMMARY.md` - This document
 
 ### Configuration
 
@@ -778,8 +778,8 @@ Chicago Fed NFCI: z=-0.421, contribution=-0.547, weight=1.30 (base×1.3)
 
 For questions or issues:
 - GitHub: https://github.com/scottdhughes/PAMP-WATCH-PXI
-- Documentation: `/PXI_ENHANCEMENT_SPEC.md`
-- Implementation: `/IMPLEMENTATION_SUMMARY.md`
+- Documentation: `docs/PXI_ENHANCEMENT_SPEC.md`
+- Implementation: `docs/IMPLEMENTATION_SUMMARY.md`
 
 ---
 
