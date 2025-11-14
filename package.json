@@ -21,6 +21,7 @@
     "optimize:weights": "tsx scripts/optimize-weights.ts",
     "predict:regime": "tsx scripts/predict-regime.ts",
     "predict:regime:lstm": "tsx scripts/predict-regime-lstm.ts",
+    "seed:validation": "tsx scripts/seed-validation-data.ts",
     "test": "vitest"
   },
   "dependencies": {

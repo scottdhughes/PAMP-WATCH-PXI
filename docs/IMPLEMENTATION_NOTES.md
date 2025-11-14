@@ -11,3 +11,8 @@
 | BTC Daily Return | CoinGecko | `https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=usd&days=2&interval=daily` | Public (no key) but rate limited; optional proxy via `COINGECKO_BASE`. | Compute `(today - yesterday) / yesterday`. Timestamp from latest price epoch. | `{ "prices": [[1716336000000, 69000.1],[1716422400000, 71250.6]] }` |
 
 Validation rules in `packages/data-ingest/src/validator.ts` ensure HY spread exceeds IG spread, guardrails for unrealistic jumps, and stale detection logs when feeds age >5 minutes (`config.staleThresholdMs`).
+
+## Developer Utilities
+
+- `computePXI.ts`: shared helper that mirrors the compute worker’s weighting logic so scripts/tests (e.g., `scripts/compute-historical-pxi.ts` and `computePXI.test.ts`) can normalize metrics without spinning up the full worker stack.
+- `scripts/seed-validation-data.ts`: deterministic data seeder that truncates PXI tables and inserts 30 days of synthetic samples for every metric, providing a clean dataset for `tests/pxi_validation.test.ts`. Run via `npm run seed:validation` before `PXI_VALIDATION_ENABLED=true npm test -- --run` when developing offline.

@@ -433,6 +433,20 @@ Outputs JSON summary to `logs/validation/pxi_validation_YYYY-MM-DD.json` with:
 ✅ VIX-HY OAS correlation: Positive
 ✅ Data freshness: <7 days
 
+### Local Test Data Seeder
+
+Need deterministic data without hitting external APIs?
+
+```bash
+# Populate TimescaleDB with 30 days of synthetic PXI samples
+npm run seed:validation
+
+# Run the full validation suite against the seeded data set
+PXI_VALIDATION_ENABLED=true npm test -- --run
+```
+
+The seeder truncates PXI tables, inserts normalized samples for every metric in `shared/pxiMetrics.ts`, and writes a matching composite record so `tests/pxi_validation.test.ts` passes end-to-end.
+
 ---
 
 ## 📡 API Documentation
@@ -693,6 +707,8 @@ Configure alerts for:
 4. Run linter: `npm run lint`
 5. Commit with descriptive messages
 6. Push and create pull request
+
+> ⚠️ Direct pushes to `main` are discouraged. Always open a pull request from a feature branch so validation + code review can run before merge.
 
 ### Code Style
 
