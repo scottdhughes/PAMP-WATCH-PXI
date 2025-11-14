@@ -9,7 +9,7 @@ const HARD_LIMITS: Record<MetricId, { min: number; max: number }> = {
   igOas: { min: 0, max: 0.1 },
   vix: { min: 5, max: 120 },
   u3: { min: 0.02, max: 0.25 },
-  usd: { min: 70, max: 120 },
+  usd: { min: 70, max: 130 },
   nfci: { min: -2, max: 5 },
   btcReturn: { min: -0.5, max: 0.5 },
   yc_10y_2y: { min: -2, max: 4 },

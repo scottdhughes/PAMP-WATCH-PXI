@@ -443,6 +443,9 @@ npm run seed:validation
 
 # Run the full validation suite against the seeded data set
 PXI_VALIDATION_ENABLED=true npm test -- --run
+
+# Or run both steps together (ideal for CI)
+npm run validate:full
 ```
 
 The seeder truncates PXI tables, inserts normalized samples for every metric in `shared/pxiMetrics.ts`, and writes a matching composite record so `tests/pxi_validation.test.ts` passes end-to-end.

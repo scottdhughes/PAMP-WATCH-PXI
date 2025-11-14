@@ -22,6 +22,7 @@
     "predict:regime": "tsx scripts/predict-regime.ts",
     "predict:regime:lstm": "tsx scripts/predict-regime-lstm.ts",
     "seed:validation": "tsx scripts/seed-validation-data.ts",
+    "validate:full": "npm run seed:validation && PXI_VALIDATION_ENABLED=true vitest --run",
     "test": "vitest"
   },
   "dependencies": {

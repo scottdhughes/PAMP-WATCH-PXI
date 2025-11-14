@@ -80,13 +80,13 @@ describe('Validator - validateSamples', () => {
       ).not.toThrow();
     });
 
-    it('should validate USD index bounds (70-120)', () => {
+    it('should validate USD index bounds (70-130)', () => {
       expect(() =>
         validateSamples([createSample({ id: 'usd', value: 69 })]),
       ).toThrow('fell outside limits');
 
       expect(() =>
-        validateSamples([createSample({ id: 'usd', value: 121 })]),
+        validateSamples([createSample({ id: 'usd', value: 131 })]),
       ).toThrow('fell outside limits');
 
       expect(() =>
