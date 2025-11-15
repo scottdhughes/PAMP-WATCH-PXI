@@ -14,6 +14,7 @@ import {
   calculateSortinoRatio,
 } from './utils/analytics.js';
 import { runBacktest, type BacktestConfig } from './lib/backtest-engine.js';
+import { register as metricsRegistry, cacheHitCounter, cacheMissCounter, httpRequestDuration } from './lib/metrics.js';
 
 /**
  * Simple in-memory cache
@@ -30,11 +31,16 @@ const cache = new Map<string, CacheEntry<unknown>>();
  */
 function getFromCache<T>(key: string): T | null {
   const entry = cache.get(key) as CacheEntry<T> | undefined;
-  if (!entry) return null;
-  if (Date.now() > entry.expiry) {
-    cache.delete(key);
+  if (!entry) {
+    cacheMissCounter.inc();
     return null;
   }
+  if (Date.now() > entry.expiry) {
+    cache.delete(key);
+    cacheMissCounter.inc();
+    return null;
+  }
+  cacheHitCounter.inc();
   return entry.data;
 }
 
@@ -54,6 +60,22 @@ const server = Fastify({
   requestIdLogLabel: 'reqId',
   disableRequestLogging: false,
   trustProxy: true,
+});
+
+server.addHook('onRequest', (request, reply, done) => {
+  (request as any)._pxiStartTime = process.hrtime.bigint();
+  done();
+});
+
+server.addHook('onResponse', (request, reply, done) => {
+  const start = (request as any)._pxiStartTime as bigint | undefined;
+  if (start) {
+    const diff = Number(process.hrtime.bigint() - start) / 1e9;
+    const route = request.routeOptions?.url ?? request.raw.url ?? 'unknown';
+    const statusCode = (reply.statusCode || 0).toString();
+    httpRequestDuration.labels(route, statusCode).observe(diff);
+  }
+  done();
 });
 
 /**
@@ -579,15 +601,11 @@ server.get('/v1/pxi/history', async (request, reply) => {
 });
 
 /**
- * Metrics endpoint for monitoring
+ * Prometheus metrics endpoint
  */
-server.get('/metrics', async () => {
-  return {
-    uptime: process.uptime(),
-    memoryUsage: process.memoryUsage(),
-    cacheSize: cache.size,
-    timestamp: new Date().toISOString(),
-  };
+server.get('/metrics', async (request, reply) => {
+  reply.header('Content-Type', metricsRegistry.contentType);
+  return metricsRegistry.metrics();
 });
 /**
  * V1 API: Get latest regime detection

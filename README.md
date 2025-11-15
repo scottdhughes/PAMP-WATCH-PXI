@@ -445,6 +445,11 @@ Outputs JSON summary to `logs/validation/pxi_validation_YYYY-MM-DD.json` with:
 
 Both commands are safe to run repeatedly and make it easy to keep the system in sync without memorizing individual worker steps.
 
+## 📈 Observability
+
+- `/metrics` now exposes Prometheus-formatted stats (cache hits/misses, request latency, default Node metrics). Scrape it with a Prometheus server and point Grafana at the Prom data source for dashboards.
+- `/healthz` remains a lightweight JSON health check (DB connectivity + uptime).
+
 ### Local Test Data Seeder
 
 Need deterministic data without hitting external APIs?
