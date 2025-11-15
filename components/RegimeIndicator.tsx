@@ -79,6 +79,10 @@ export default function RegimeIndicator({ regime }: Props) {
           </div>
         </div>
       </div>
+      <p className="mt-4 text-xs text-slate-400 dark:text-slate-500 light:text-slate-600">
+        Regimes come from daily k-means clustering and can lag the live composite PXI. Use the
+        composite value and system alerts to gauge intraday stress moves.
+      </p>
     </div>
   );
 }

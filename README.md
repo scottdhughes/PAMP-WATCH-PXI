@@ -312,6 +312,9 @@ npm run dev
 
 # Start scheduler (for regime detection)
 npm run scheduler
+
+# Refresh ingest + compute + regime in one shot (after resets/backfills)
+npm run worker:run:all
 ```
 
 **Access Points:**
@@ -330,6 +333,8 @@ npm run scheduler
 - **PXI = 0**: Neutral stress (average historical conditions)
 - **PXI > 0**: Elevated stress (above historical average)
 - **PXI < 0**: Subdued stress (below historical average)
+
+> The dashboard shows both the real-time composite PXI and the daily k-means regime label. The clustering job only runs once per day, so the "Market Regime" banner may lag the live composite for a few hours after large moves.
 
 ### Calculation
 
@@ -432,6 +437,13 @@ Outputs JSON summary to `logs/validation/pxi_validation_YYYY-MM-DD.json` with:
 ✅ Total weight: 11.2 (excluding zero-weight metrics)
 ✅ VIX-HY OAS correlation: Positive
 ✅ Data freshness: <7 days
+
+## 🔁 Automation & Ops
+
+- `npm run worker:run:all` – sequentially runs ingest → compute → regime detection. Use it after backfills, DB restores, or whenever you need the whole pipeline refreshed.
+- `npm run validate:full` – seeds deterministic PXI data and runs the full `PXI_VALIDATION_ENABLED=true vitest -- --run` suite. Ideal for CI before merging or deploying.
+
+Both commands are safe to run repeatedly and make it easy to keep the system in sync without memorizing individual worker steps.
 
 ### Local Test Data Seeder
 
@@ -768,6 +780,17 @@ docker-compose ps timescaledb
 # Test connection
 psql $DATABASE_URL -c "\dt"
 ```
+
+**API server fails with `EADDRINUSE` (port 8787):**
+```bash
+# Find the PID holding the port
+lsof -ti tcp:8787
+
+# Kill it and restart the server
+kill -9 <PID>
+npm run server
+```
+Use `netstat -ano | find "8787"` + `taskkill /PID <PID> /F` on Windows.
 
 ---
 
