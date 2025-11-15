@@ -9,63 +9,12 @@
 import { pool } from '../db.js';
 import { logger } from '../logger.js';
 import { computePXI } from '../computePXI';
-import { pxiMetricDefinitions } from '../shared/pxiMetrics.js';
-
-interface HistoricalMetric {
-  date: string;
-  indicatorId: string;
-  value: number | null;
-  mean: number | null;
-  stddev: number | null;
-}
-
-/**
- * Get all dates that have complete metric data
- */
-async function getAvailableDates(daysBack: number = 30): Promise<string[]> {
-  const result = await pool.query<{ date: string }>(
-    `SELECT DISTINCT date
-     FROM history_values
-     WHERE date >= NOW() - INTERVAL '${daysBack} days'
-     ORDER BY date DESC`,
-  );
-  return result.rows.map((r) => {
-    const iso = (r.date instanceof Date ? r.date : new Date(r.date)).toISOString();
-    return iso.split('T')[0];
-  });
-}
-
-/**
- * Get metrics for a specific date
- */
-async function getMetricsForDate(date: string): Promise<Record<string, HistoricalMetric>> {
-  const result = await pool.query<HistoricalMetric>(
-    `SELECT
-        hv.indicator_id AS "indicatorId",
-        hv.date,
-        hv.raw_value AS value,
-        stats.mean_value AS mean,
-        stats.stddev_value AS stddev
-     FROM history_values hv
-     LEFT JOIN LATERAL (
-       SELECT mean_value, stddev_value
-       FROM stats_values sv
-       WHERE sv.indicator_id = hv.indicator_id
-         AND sv.date <= hv.date
-       ORDER BY sv.date DESC
-       LIMIT 1
-     ) stats ON TRUE
-     WHERE hv.date = $1`,
-    [date]
-  );
-
-  const metrics: Record<string, HistoricalMetric> = {};
-  for (const row of result.rows) {
-    metrics[row.indicatorId] = row;
-  }
-
-  return metrics;
-}
+import {
+  REQUIRED_METRIC_IDS,
+  fetchAvailableHistoryDates,
+  fetchHistoricalMetricsForDate,
+  hasAllRequiredMetrics,
+} from '../lib/history.js';
 
 /**
  * Insert computed PXI into database
@@ -103,7 +52,7 @@ async function computeHistoricalPXI(): Promise<void> {
 
   try {
     // Get all dates with data
-    const dates = await getAvailableDates(30);
+    const dates = await fetchAvailableHistoryDates(30);
     logger.info({ count: dates.length }, 'Found dates with metric data');
 
     if (dates.length === 0) {
@@ -117,19 +66,15 @@ async function computeHistoricalPXI(): Promise<void> {
     for (const date of dates) {
       try {
         // Get all metrics for this date
-        const metrics = await getMetricsForDate(date);
-
-        // Check if we have all required metrics
-        const requiredMetrics = pxiMetricDefinitions.map((def) => def.id);
-        const missingMetrics = requiredMetrics.filter(id => !metrics[id]);
-
-        if (missingMetrics.length > 0) {
-          logger.debug({ date, missingMetrics }, 'Skipping date with missing metrics');
+        const metrics = await fetchHistoricalMetricsForDate(date);
+        const { ok, missing } = hasAllRequiredMetrics(metrics, REQUIRED_METRIC_IDS);
+        if (!ok) {
+          logger.debug({ date, missingMetrics: missing }, 'Skipping date with missing metrics');
           continue;
         }
 
         // Prepare metrics in the format expected by computePXI
-        const metricSamples = requiredMetrics.map(id => {
+        const metricSamples = REQUIRED_METRIC_IDS.map(id => {
           const metric = metrics[id];
 
           // Calculate z-score
