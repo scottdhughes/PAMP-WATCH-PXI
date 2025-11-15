@@ -9,6 +9,7 @@
 import { pool } from '../db.js';
 import { logger } from '../logger.js';
 import { computePXI } from '../computePXI';
+import { pxiMetricDefinitions } from '../shared/pxiMetrics.js';
 
 interface HistoricalMetric {
   date: string;
@@ -28,7 +29,10 @@ async function getAvailableDates(daysBack: number = 30): Promise<string[]> {
      WHERE date >= NOW() - INTERVAL '${daysBack} days'
      ORDER BY date DESC`,
   );
-  return result.rows.map(r => r.date);
+  return result.rows.map((r) => {
+    const iso = (r.date instanceof Date ? r.date : new Date(r.date)).toISOString();
+    return iso.split('T')[0];
+  });
 }
 
 /**
@@ -36,9 +40,22 @@ async function getAvailableDates(daysBack: number = 30): Promise<string[]> {
  */
 async function getMetricsForDate(date: string): Promise<Record<string, HistoricalMetric>> {
   const result = await pool.query<HistoricalMetric>(
-    `SELECT indicator_id as "indicatorId", date, value, mean, stddev
-     FROM history_values
-     WHERE date = $1`,
+    `SELECT
+        hv.indicator_id AS "indicatorId",
+        hv.date,
+        hv.raw_value AS value,
+        stats.mean_value AS mean,
+        stats.stddev_value AS stddev
+     FROM history_values hv
+     LEFT JOIN LATERAL (
+       SELECT mean_value, stddev_value
+       FROM stats_values sv
+       WHERE sv.indicator_id = hv.indicator_id
+         AND sv.date <= hv.date
+       ORDER BY sv.date DESC
+       LIMIT 1
+     ) stats ON TRUE
+     WHERE hv.date = $1`,
     [date]
   );
 
@@ -56,18 +73,25 @@ async function getMetricsForDate(date: string): Promise<Record<string, Historica
 async function insertHistoricalPXI(
   timestamp: Date,
   pxiValue: number,
+  pxiZScore: number,
   regime: string,
-  thresholds: any
+  totalWeight: number,
+  pampCount: number,
+  stressCount: number,
+  metadata: Record<string, unknown>
 ): Promise<void> {
   await pool.query(
-    `INSERT INTO composite_pxi_regime (timestamp, pxi_value, regime, weight_sum, thresholds)
-     VALUES ($1, $2, $3, $4, $5)
+    `INSERT INTO composite_pxi_regime (timestamp, pxi_value, pxi_z_score, regime, total_weight, pamp_count, stress_count, metadata)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
      ON CONFLICT (timestamp) DO UPDATE
      SET pxi_value = EXCLUDED.pxi_value,
+         pxi_z_score = EXCLUDED.pxi_z_score,
          regime = EXCLUDED.regime,
-         weight_sum = EXCLUDED.weight_sum,
-         thresholds = EXCLUDED.thresholds`,
-    [timestamp, pxiValue, regime, 7.0, JSON.stringify(thresholds)]
+         total_weight = EXCLUDED.total_weight,
+         pamp_count = EXCLUDED.pamp_count,
+         stress_count = EXCLUDED.stress_count,
+         metadata = EXCLUDED.metadata`,
+    [timestamp, pxiValue, pxiZScore, regime, totalWeight, pampCount, stressCount, JSON.stringify(metadata)]
   );
 }
 
@@ -96,7 +120,7 @@ async function computeHistoricalPXI(): Promise<void> {
         const metrics = await getMetricsForDate(date);
 
         // Check if we have all required metrics
-        const requiredMetrics = ['hyOas', 'igOas', 'vix', 'u3', 'usd', 'nfci', 'btcReturn'];
+        const requiredMetrics = pxiMetricDefinitions.map((def) => def.id);
         const missingMetrics = requiredMetrics.filter(id => !metrics[id]);
 
         if (missingMetrics.length > 0) {
@@ -131,13 +155,24 @@ async function computeHistoricalPXI(): Promise<void> {
         // Compute PXI
         const pxiResult = computePXI(metricSamples);
 
+        const pampCount = pxiResult.metrics.filter(m => m.zScore > 2).length;
+        const stressCount = pxiResult.metrics.filter(m => m.zScore < -2).length;
+        const totalWeight = pxiResult.metrics.reduce((sum, metric) => sum + Math.max(metric.weight, 0), 0);
+
         // Insert into database
         const timestamp = new Date(date + 'T12:00:00Z'); // Use noon UTC for historical dates
         await insertHistoricalPXI(
           timestamp,
           pxiResult.pxi,
+          pxiResult.zScore,
           pxiResult.regime,
-          { stable: 1, caution: 2, stress: 3, crisis: 4 }
+          totalWeight,
+          pampCount,
+          stressCount,
+          {
+            thresholds: { stable: 1, caution: 2, stress: 3, crisis: 4 },
+            seeded: true,
+          }
         );
 
         processed++;
@@ -152,7 +187,12 @@ async function computeHistoricalPXI(): Promise<void> {
 
     logger.info({ processed, errors, total: dates.length }, 'Historical PXI computation completed');
   } catch (error) {
-    logger.error({ error }, 'Historical PXI computation failed');
+    logger.error(
+      {
+        error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+      },
+      'Historical PXI computation failed',
+    );
     throw error;
   }
 }
