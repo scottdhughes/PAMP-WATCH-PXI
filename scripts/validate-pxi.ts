@@ -19,7 +19,10 @@ const VALIDATION_WINDOW_DAYS = 90;
 const Z_SCORE_TOLERANCE = 1e-6;
 const OUTPUT_DIR = 'logs/validation';
 
+const VALIDATION_SCHEMA_VERSION = '2025-11-15.1';
+
 interface ValidationResult {
+  schemaVersion: string;
   timestamp: string;
   summary: {
     totalMetrics: number;
@@ -45,6 +48,13 @@ interface ValidationResult {
     passed: boolean;
   };
   errors: string[];
+}
+
+function explainDeviation(diff: number, tolerance: number, metric: string): string {
+  if (diff <= tolerance) return `Within tolerance (${diff.toExponential(2)} <= ${tolerance})`;
+  if (diff <= tolerance * 10) return `${metric} deviated slightly (${diff.toExponential(2)}); likely rounding drift`;
+  if (diff <= tolerance * 100) return `${metric} deviated (${diff.toExponential(2)}); check rolling stats or history window`;
+  return `${metric} deviated significantly (${diff.toExponential(2)}); investigate ingestion/calculation`;
 }
 
 /**
@@ -254,7 +264,7 @@ async function validatePXI(): Promise<ValidationResult> {
       recomputedZScore: recomputed.zScore,
       zScoreDiff,
       passed,
-      reason: passed ? null : `Z-score diff ${zScoreDiff.toExponential(2)} > tolerance`,
+      reason: explainDeviation(zScoreDiff, Z_SCORE_TOLERANCE, def.id),
     });
   }
 
@@ -295,6 +305,7 @@ async function validatePXI(): Promise<ValidationResult> {
 
   // Build validation result
   const result: ValidationResult = {
+    schemaVersion: VALIDATION_SCHEMA_VERSION,
     timestamp,
     summary: {
       totalMetrics: pxiMetricDefinitions.length,
