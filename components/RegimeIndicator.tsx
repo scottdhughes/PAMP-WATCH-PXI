@@ -43,6 +43,9 @@ export default function RegimeIndicator({ regime }: Props) {
               {regime.regime}
             </span>
           </div>
+          <p className="mt-2 text-xs text-slate-400 dark:text-slate-500 light:text-slate-600">
+            Last updated: {new Date(regime.timestamp || regime.calculatedAt || Date.now()).toLocaleString()} (k-means refresh is daily; may lag live PXI)
+          </p>
         </div>
         <div className="grid grid-cols-2 gap-6 text-right">
           <div>

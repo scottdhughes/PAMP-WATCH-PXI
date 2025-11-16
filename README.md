@@ -450,6 +450,11 @@ Both commands are safe to run repeatedly and make it easy to keep the system in 
 - `/metrics` now exposes Prometheus-formatted stats (cache hits/misses, request latency, default Node metrics). Scrape it with a Prometheus server and point Grafana at the Prom data source for dashboards.
 - `/healthz` remains a lightweight JSON health check (DB connectivity + uptime).
 
+## 🔂 Scheduler / Cron
+
+- `scripts/refresh-all.sh` runs ingest → compute → compute:regime in order. It’s cron-friendly if you need periodic refreshes:
+  - Example cron: `*/30 * * * * cd /path/to/PAMP-WATCH-PXI && ./scripts/refresh-all.sh >> /var/log/pxi-refresh.log 2>&1`
+
 ### Local Test Data Seeder
 
 Need deterministic data without hitting external APIs?
