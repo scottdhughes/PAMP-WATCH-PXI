@@ -1,4 +1,5 @@
 import { fetchLatestFredObservation } from './clients/fredClient.js';
+import { fetchGlobalQuote } from './clients/alphaVantageClient.js';
 import { fetchBtcDailyReturn, fetchBtcPricesForIndicators } from './clients/coinGeckoClient.js';
 import { calculateRSI, calculateMACD, calculateSignalMultiplier } from './utils/technicalIndicators.js';
 import { fetchLatestIndicators, insertDailyIndicators } from './db.js';
@@ -64,6 +65,24 @@ export const metricFetchers: MetricFetcher[] = [
     id: 'vix',
     label: 'VIX Index',
     fetch: async () => {
+      // Prefer live VIX via AlphaVantage if configured; fall back to FRED EOD
+      const useAlpha = process.env.VIX_SOURCE?.toLowerCase() === 'alpha';
+      if (useAlpha) {
+        try {
+          const { value, timestamp } = await fetchGlobalQuote('VIX');
+          return {
+            id: 'vix',
+            label: 'VIX Index',
+            value,
+            unit: 'index',
+            sourceTimestamp: timestamp,
+            ingestedAt: new Date().toISOString(),
+          };
+        } catch (error) {
+          logger.warn({ error }, 'AlphaVantage VIX fetch failed, falling back to FRED (VIXCLS)');
+        }
+      }
+
       const { value, timestamp } = await fetchLatestFredObservation('VIXCLS');
       return {
         id: 'vix',
